@@ -1,15 +1,15 @@
 import tensorflow as tf
-
+import os
 from data_utils import Vocabulary, Dataset
 from language_model import LM
 from run_utils import run_train, run_eval
 
 flags = tf.flags
-flags.DEFINE_string("logdir", "/tmp/lm1b", "Logging directory.")
+flags.DEFINE_string("logdir", "lm1b", "Logging directory.")
 flags.DEFINE_string("datadir", None, "Logging directory.")
 flags.DEFINE_string("mode", "train", "Whether to run 'train' or 'eval' model.")
 flags.DEFINE_string("hpconfig", "", "Overrides default hyper-parameters.")
-flags.DEFINE_integer("num_gpus", 1, "Number of GPUs used.")
+flags.DEFINE_integer("num_gpus", 8, "Number of GPUs used.")
 flags.DEFINE_integer("eval_steps", 70, "Number of eval steps.")
 
 FLAGS = flags.FLAGS
@@ -19,7 +19,7 @@ def main(_):
     hps = LM.get_default_hparams().parse(FLAGS.hpconfig)
     hps.num_gpus = FLAGS.num_gpus
 
-    vocab = Vocabulary.from_file("1b_word_vocab.txt")
+    vocab = Vocabulary.from_file(os.path.join(FLAGS.datadir,"1b_word_vocab.txt"))
 
     if FLAGS.mode == "train":
         hps.batch_size = 256
