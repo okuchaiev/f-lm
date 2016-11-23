@@ -9,6 +9,9 @@ class HParams(object):
         self._items[k] = v
         setattr(self, k, v)
 
+    def __str__(self):
+        return str(self._items)
+
     def parse(self, str_value):
         hps = HParams(**self._items)
         for entry in str_value.strip().split(","):

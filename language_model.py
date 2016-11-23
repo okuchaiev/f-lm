@@ -81,19 +81,18 @@ class LM(object):
                 inputs[t] = tf.identity(inputs[t])
 
         inputs = tf.reshape(tf.concat(1, inputs), [-1, hps.projected_size])
-
-        # Initialization ignores the fact that softmax_w is transposed. That worked slightly better.
+        
+        # Initialization ignores the fact that softmax_w is transposed. Twhat worked slightly better.
         softmax_w = sharded_variable("softmax_w", [hps.vocab_size, hps.projected_size], hps.num_shards)
         softmax_b = tf.get_variable("softmax_b", [hps.vocab_size])
-
+        
         if hps.num_sampled == 0:
             full_softmax_w = tf.reshape(tf.concat(1, softmax_w), [-1, hps.projected_size])
             full_softmax_w = full_softmax_w[:hps.vocab_size, :]
 
             logits = tf.matmul(inputs, full_softmax_w, transpose_b=True) + softmax_b
-            # targets = tf.reshape(tf.transpose(self.y), [-1])
             targets = tf.reshape(y, [-1])
-            loss = tf.nn.sparse_softmax_cross_entropy_with_logits(logits, targets)
+            loss = tf.nn.sparse_softmax_cross_entropy_with_logits(logits, targets)            
         else:
             targets = tf.reshape(y, [-1, 1])
             loss = tf.nn.sampled_softmax_loss(softmax_w, softmax_b, tf.to_float(inputs),
@@ -146,19 +145,19 @@ class LM(object):
             batch_size=128,
             num_steps=20,
             num_shards=8,
-            num_layers=2,
+            num_layers=1,
             learning_rate=0.2,
-            max_grad_norm=1.0,
+            max_grad_norm=10.0,
             num_delayed_steps=150,
             keep_prob=0.9,
 
             vocab_size=793470,
-            emb_size=1024,
-            state_size=8192,
-            projected_size=1024,
+            emb_size=512,
+            state_size=2048,
+            projected_size=512,
             num_sampled=8192,
-            num_gpus=1,
+            num_gpus=8,
 
             average_params=True,
             run_profiler=False,
-        )
+)

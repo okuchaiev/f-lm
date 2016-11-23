@@ -45,7 +45,6 @@ class CheckpointLoader(object):
             if load_from_checkpoint(self.saver, self.logdir):
                 global_step = int(self.global_step_tensor.eval())
                 if global_step <= self.last_global_step:
-                    print("Waiting for a new checkpoint...")
                     time.sleep(60)
                     continue
                 print("Succesfully loaded model at step=%s." % global_step)
