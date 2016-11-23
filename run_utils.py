@@ -115,7 +115,7 @@ def run_eval(dataset, hps, logdir, mode, num_eval_steps):
             loss_nom = 0.0
             loss_den = 0.0
             for i, (x, y, w) in enumerate(data_iterator):
-                if i >= num_eval_steps:
+                if i >= num_eval_steps and mode!="eval_full":
                     break
 
                 loss = sess.run(model.loss, {model.x: x, model.y: y, model.w: w})
