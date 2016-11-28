@@ -93,11 +93,11 @@ class Dataset(object):
         streams = [None] * batch_size
         x = np.zeros([batch_size, num_steps], np.int32)
         y = np.zeros([batch_size, num_steps], np.int32)
-        w = np.zeros([batch_size, num_steps], np.uint8)
+        #w = np.zeros([batch_size, num_steps], np.uint8)
         while True:
             x[:] = 0
             y[:] = 0
-            w[:] = 0
+            #w[:] = 0
             for i in range(batch_size):
                 tokens_filled = 0
                 try:
@@ -107,15 +107,16 @@ class Dataset(object):
                         num_tokens = min(len(streams[i]) - 1, num_steps - tokens_filled)
                         x[i, tokens_filled:tokens_filled+num_tokens] = streams[i][:num_tokens]
                         y[i, tokens_filled:tokens_filled + num_tokens] = streams[i][1:num_tokens+1]
-                        w[i, tokens_filled:tokens_filled + num_tokens] = 1
+                        #w[i, tokens_filled:tokens_filled + num_tokens] = 1
                         streams[i] = streams[i][num_tokens:]
                         tokens_filled += num_tokens
                 except StopIteration:
                     pass
-            if not np.any(w):
-                return
+            #if not np.any(w):
+            #    return
 
-            yield x, y, w
+            #yield x, y, w
+            yield x, y
 
     def iterate_once(self, batch_size, num_steps):
         def file_stream():

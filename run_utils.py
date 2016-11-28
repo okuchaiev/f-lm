@@ -55,12 +55,14 @@ def run_train(dataset, hps, logdir, ps_device, task=0, master=""):
             if should_compute_summary:
                 fetches += [model.summary_op]
 
-            x, y, w = next(data_iterator)
+            #x, y, w = next(data_iterator)
+            x, y = next(data_iterator)
             should_run_profiler = (hps.run_profiler and task == 0 and local_step % 1000 == 13)
             if should_run_profiler:
                 run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
                 run_metadata = tf.RunMetadata()
-                fetched = sess.run(fetches, {model.x: x, model.y: y, model.w: w},
+                #fetched = sess.run(fetches, {model.x: x, model.y: y, model.w: w},
+                fetched = sess.run(fetches, {model.x: x, model.y: y},
                                    options=run_options, run_metadata=run_metadata)
                 # Create the Timeline object, and write it to a json
                 tl = timeline.Timeline(run_metadata.step_stats)
@@ -70,7 +72,8 @@ def run_train(dataset, hps, logdir, ps_device, task=0, master=""):
                     f.write(ctf)
                 print("Finished profiling!")
             else:
-                fetched = sess.run(fetches, {model.x: x, model.y: y, model.w: w})
+                #fetched = sess.run(fetches, {model.x: x, model.y: y, model.w: w})
+                fetched = sess.run(fetches, {model.x: x, model.y: y})
 
             local_step += 1
             if should_compute_summary:
@@ -114,11 +117,13 @@ def run_eval(dataset, hps, logdir, mode, num_eval_steps):
             tf.initialize_local_variables().run()
             loss_nom = 0.0
             loss_den = 0.0
-            for i, (x, y, w) in enumerate(data_iterator):
+            #for i, (x, y, w) in enumerate(data_iterator):
+            for i, (x, y) in enumerate(data_iterator):
                 if i >= num_eval_steps and mode!="eval_full":
                     break
 
-                loss = sess.run(model.loss, {model.x: x, model.y: y, model.w: w})
+                #loss = sess.run(model.loss, {model.x: x, model.y: y, model.w: w})
+                loss = sess.run(model.loss, {model.x: x, model.y: y})
                 loss_nom += loss
                 loss_den += w.mean()
                 loss = loss_nom / loss_den

@@ -11,17 +11,18 @@ class LM(object):
         data_size = hps.batch_size * hps.num_gpus
         self.x = tf.placeholder(tf.int32, [data_size, hps.num_steps])
         self.y = tf.placeholder(tf.int32, [data_size, hps.num_steps])
-        self.w = tf.placeholder(tf.int32, [data_size, hps.num_steps])
+        #self.w = tf.placeholder(tf.int32, [data_size, hps.num_steps])
 
         losses = []
         tower_grads = []
         xs = tf.split(0, hps.num_gpus, self.x)
         ys = tf.split(0, hps.num_gpus, self.y)
-        ws = tf.split(0, hps.num_gpus, self.w)
+        #ws = tf.split(0, hps.num_gpus, self.w)
         for i in range(hps.num_gpus):
             with tf.device(assign_to_gpu(i, ps_device)), tf.variable_scope(tf.get_variable_scope(),
                                                                            reuse=True if i > 0 else None):
-                loss = self._forward(i, xs[i], ys[i], ws[i])
+                #loss = self._forward(i, xs[i], ys[i], ws[i])
+                loss = self._forward(i, xs[i], ys[i])
                 losses += [loss]
                 if mode == "train":
                     cur_grads = self._backward(loss, summaries=(i == hps.num_gpus - 1))
@@ -49,9 +50,10 @@ class LM(object):
                 self.train_op = tf.group(*[self.train_op, ema.apply(variables_to_average)])
                 self.avg_dict = ema.variables_to_restore(variables_to_average)
 
-    def _forward(self, gpu, x, y, w):
+    #def _forward(self, gpu, x, y, w):
+    def _forward(self, gpu, x, y):
         hps = self.hps
-        w = tf.to_float(w)
+        #w = tf.to_float(w)
         self.initial_states = []
         for i in range(hps.num_layers):
             with tf.device("/gpu:%d" % gpu):
@@ -98,13 +100,14 @@ class LM(object):
             loss = tf.nn.sampled_softmax_loss(softmax_w, softmax_b, tf.to_float(inputs),
                                               targets, hps.num_sampled, hps.vocab_size)
 
-        loss = tf.reduce_mean(loss * tf.reshape(w, [-1]))
+        #loss = tf.reduce_mean(loss * tf.reshape(w, [-1]))
+        loss = tf.reduce_mean(loss)
         return loss
 
     def _backward(self, loss, summaries=False):
         hps = self.hps
 
-        loss = loss * hps.num_steps
+        loss = loss * hps.num_steps  #??????? why?
 
         emb_vars = find_trainable_variables("emb")
         lstm_vars = find_trainable_variables("LSTM")
