@@ -1,6 +1,6 @@
 import tensorflow as tf
 
-from model_utils import sharded_variable, LSTMCell
+from model_utils import sharded_variable, LSTMCell, getdtype
 from common import assign_to_gpu, average_grads, find_trainable_variables
 from hparams import HParams
 
@@ -57,21 +57,22 @@ class LM(object):
         self.initial_states = []
         for i in range(hps.num_layers):
             with tf.device("/gpu:%d" % gpu):
-                v = tf.Variable(tf.zeros([hps.batch_size, hps.state_size + hps.projected_size]), trainable=False,
-                                collections=[tf.GraphKeys.LOCAL_VARIABLES], name="state_%d_%d" % (gpu, i))
+                v = tf.Variable(tf.zeros([hps.batch_size, hps.state_size + hps.projected_size], dtype=getdtype(hps, True)),
+                                trainable=False, collections=[tf.GraphKeys.LOCAL_VARIABLES],
+                                name="state_%d_%d" % (gpu, i), dtype=getdtype(hps, True)) #state should be same type as RNN
                 self.initial_states += [v]
 
-        emb_vars = sharded_variable("emb", [hps.vocab_size, hps.emb_size], hps.num_shards)
+        emb_vars = sharded_variable("emb", [hps.vocab_size, hps.emb_size], hps.num_shards, dtype=getdtype(hps, False))
 
         x = tf.nn.embedding_lookup(emb_vars, x)  # [bs, steps, emb_size]
         if hps.keep_prob < 1.0:
             x = tf.nn.dropout(x, hps.keep_prob)
 
-        inputs = [tf.squeeze(v, [1]) for v in tf.split(1, hps.num_steps, x)]
+        inputs =  [tf.squeeze(tf.cast(v, getdtype(hps, True)), [1]) for v in tf.split(1, hps.num_steps, x)]
 
         for i in range(hps.num_layers):
             with tf.variable_scope("lstm_%d" % i):
-                cell = LSTMCell(hps.state_size, hps.emb_size, num_proj=hps.projected_size)
+                cell = LSTMCell(hps.state_size, hps.emb_size, num_proj=hps.projected_size, dtype=getdtype(hps, True))
 
             state = self.initial_states[i]
             for t in range(hps.num_steps):
@@ -83,18 +84,18 @@ class LM(object):
                 inputs[t] = tf.identity(inputs[t])
 
         inputs = tf.reshape(tf.concat(1, inputs), [-1, hps.projected_size])
-        
+
         # Initialization ignores the fact that softmax_w is transposed. Twhat worked slightly better.
         softmax_w = sharded_variable("softmax_w", [hps.vocab_size, hps.projected_size], hps.num_shards)
         softmax_b = tf.get_variable("softmax_b", [hps.vocab_size])
-        
+
         if hps.num_sampled == 0:
             full_softmax_w = tf.reshape(tf.concat(1, softmax_w), [-1, hps.projected_size])
             full_softmax_w = full_softmax_w[:hps.vocab_size, :]
 
             logits = tf.matmul(inputs, full_softmax_w, transpose_b=True) + softmax_b
             targets = tf.reshape(y, [-1])
-            loss = tf.nn.sparse_softmax_cross_entropy_with_logits(logits, targets)            
+            loss = tf.nn.sparse_softmax_cross_entropy_with_logits(logits, targets)
         else:
             targets = tf.reshape(y, [-1, 1])
             loss = tf.nn.sampled_softmax_loss(softmax_w, softmax_b, tf.to_float(inputs),
@@ -161,6 +162,8 @@ class LM(object):
             num_sampled=8192,
             num_gpus=8,
 
+            float16_rnn=False,
+            float16_non_rnn=False,
             average_params=True,
             run_profiler=False,
 )

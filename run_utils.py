@@ -15,13 +15,13 @@ def run_train(dataset, hps, logdir, ps_device, task=0, master=""):
 
     print("ALL VARIABLES")
     for v in tf.all_variables():
-        print("%s %s %s" % (v.name, v.get_shape(), v.device))
+        print("%s %s %s %s" % (v.name, v.get_shape(), v.dtype, v.device))
     print("TRAINABLE VARIABLES")
     for v in tf.trainable_variables():
-        print("%s %s %s" % (v.name, v.get_shape(), v.device))
+        print("%s %s %s %s" % (v.name, v.get_shape(), v.dtype, v.device))
     print("LOCAL VARIABLES")
     for v in tf.local_variables():
-        print("%s %s %s" % (v.name, v.get_shape(), v.device))
+        print("%s %s %s %s" % (v.name, v.get_shape(), v.dtype, v.device))
 
     sv = tf.train.Supervisor(is_chief=(task == 0),
                              logdir=logdir,
@@ -42,7 +42,7 @@ def run_train(dataset, hps, logdir, ps_device, task=0, master=""):
                 break
             else:
                 print("Current step is %d. Waiting until: %d" % (step, waiting_until_step))
-            time.sleep(10.0)
+            time.sleep(20.0)
 
         local_step = 0
         prev_global_step = sess.run(model.global_step)
