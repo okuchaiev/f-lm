@@ -125,6 +125,7 @@ def run_eval(dataset, hps, logdir, mode, num_eval_steps):
                 #loss = sess.run(model.loss, {model.x: x, model.y: y, model.w: w})
                 loss = sess.run(model.loss, {model.x: x, model.y: y})
                 loss_nom += loss
+                loss_den += 1 # ???
                 #loss_den += w.mean()
                 loss = loss_nom / loss_den
                 sys.stdout.write("%d: %.3f (%.3f) ... " % (i, loss, np.exp(loss)))
