@@ -1,6 +1,6 @@
 import sys
 import time
-
+sys.stdout=sys.stderr
 import numpy as np
 import tensorflow as tf
 from tensorflow.python.client import timeline
