@@ -1,6 +1,6 @@
 import tensorflow as tf
 
-from model_utils import sharded_variable, LSTMCell, getdtype
+from model_utils import sharded_variable, LSTMCell, getdtype, variable_summaries
 from common import assign_to_gpu, average_grads, find_trainable_variables
 from hparams import HParams
 
@@ -57,12 +57,14 @@ class LM(object):
         self.initial_states = []
         for i in range(hps.num_layers):
             with tf.device("/gpu:%d" % gpu):
-                v = tf.Variable(tf.zeros([hps.batch_size, hps.state_size + hps.projected_size], dtype=getdtype(hps, True)),
-                                trainable=False, collections=[tf.GraphKeys.LOCAL_VARIABLES],
-                                name="state_%d_%d" % (gpu, i), dtype=getdtype(hps, True)) #state should be same type as RNN
-                self.initial_states += [v]
+                state = tf.Variable(tf.zeros([hps.batch_size, hps.state_size + hps.projected_size],
+                                             dtype=getdtype(hps, True)),
+                                    trainable=False, collections=[tf.GraphKeys.LOCAL_VARIABLES],
+                                    name="state_%d_%d" % (gpu, i), dtype=getdtype(hps, True))
+                self.initial_states += [state]
 
-        emb_vars = sharded_variable("emb", [hps.vocab_size, hps.emb_size], hps.num_shards, dtype=getdtype(hps, False))
+        emb_vars = sharded_variable("emb", [hps.vocab_size, hps.emb_size],
+                                    hps.num_shards, dtype=getdtype(hps, False))
 
         x = tf.nn.embedding_lookup(emb_vars, x)  # [bs, steps, emb_size]
         if hps.keep_prob < 1.0:
@@ -93,14 +95,13 @@ class LM(object):
             full_softmax_w = tf.reshape(tf.concat(1, softmax_w), [-1, hps.projected_size])
             full_softmax_w = full_softmax_w[:hps.vocab_size, :]
 
-            logits = tf.matmul(inputs, full_softmax_w, transpose_b=True) + softmax_b
+            logits = tf.matmul(tf.to_float(inputs), full_softmax_w, transpose_b=True) + softmax_b
             targets = tf.reshape(y, [-1])
             loss = tf.nn.sparse_softmax_cross_entropy_with_logits(logits, targets)
         else:
             targets = tf.reshape(y, [-1, 1])
             loss = tf.nn.sampled_softmax_loss(softmax_w, softmax_b, tf.to_float(inputs),
                                               targets, hps.num_sampled, hps.vocab_size)
-
         #loss = tf.reduce_mean(loss * tf.reshape(w, [-1]))
         loss = tf.reduce_mean(loss)
         return loss
@@ -135,11 +136,11 @@ class LM(object):
             tf.scalar_summary("model/lstm_grad_norm", lstm_norm)
             tf.scalar_summary("model/lstm_grad_scale", tf.minimum(hps.max_grad_norm / lstm_norm, 1.0))
             tf.scalar_summary("model/lstm_weight_norm", tf.global_norm(lstm_vars))
-            # for v, g, cg in zip(all_vars, orig_grads, clipped_grads):
-            #     name = v.name.lstrip("model/")
-            #     tf.histogram_summary(name + "/var", v)
-            #     tf.histogram_summary(name + "/grad", g)
-            #     tf.histogram_summary(name + "/clipped_grad", cg)
+            for v, g, cg in zip(all_vars, orig_grads, clipped_grads):
+                name = v.name.lstrip("model/")
+                variable_summaries(v, 'weights' , name)
+                variable_summaries(g, 'gradients', name)
+                variable_summaries(cg, 'clipped_grads', name)
 
         return list(zip(clipped_grads, all_vars))
 

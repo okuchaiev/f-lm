@@ -2,6 +2,7 @@
 Entry point for training and eval
 """
 import os
+
 import tensorflow as tf
 from data_utils import Vocabulary, Dataset
 from language_model import LM

@@ -29,8 +29,6 @@ def create_tmux_commands(session, gpus, logdir, hpconfig, datadir, path2code):
     cmds_map += [new_tmux_cmd(
         "eval_testave", "CUDA_VISIBLE_DEVICES= {} --mode eval_test_ave --hpconfig {} --datadir {}".format(
             base_cmd, hpconfig, datadir))]
-    #cmds_map += [new_tmux_cmd("tb", ["tensorboard --logdir {} --port 12012".format(logdir)])]
-    #cmds_map += [new_tmux_cmd("htop", ["htop"])]
 
     windows = [v[0] for v in cmds_map]
 
