@@ -12,7 +12,8 @@ from common import CheckpointLoader
 def run_train(dataset, hps, logdir, ps_device, task=0, master=""):
     with tf.variable_scope("model"):
         model = LM(hps, "train", ps_device)
-
+    stime = time.time()
+    print("Current time: %s" % stime)
     print("ALL VARIABLES")
     for v in tf.all_variables():
         print("%s %s %s %s" % (v.name, v.get_shape(), v.dtype, v.device))
@@ -35,7 +36,7 @@ def run_train(dataset, hps, logdir, ps_device, task=0, master=""):
                             inter_op_parallelism_threads=20)
     with sv.managed_session(master, config=config) as sess:
         # Slowly increase the number of workers during beginning of the training.
-        while not sv.should_stop():
+        while not sv.should_stop() and (time.time() - stime) < hps.max_time:
             step = int(sess.run(model.global_step))
             waiting_until_step = task * hps.num_delayed_steps
             if step >= waiting_until_step:
@@ -48,7 +49,7 @@ def run_train(dataset, hps, logdir, ps_device, task=0, master=""):
         prev_global_step = sess.run(model.global_step)
         prev_time = time.time()
         data_iterator = dataset.iterate_forever(hps.batch_size * hps.num_gpus, hps.num_steps)
-        while not sv.should_stop():
+        while not sv.should_stop() and (time.time() - stime) < hps.max_time:
             fetches = [model.global_step, model.loss, model.train_op]
             # Chief worker computes summaries every 20 steps.
             should_compute_summary = (task == 0 and local_step > 0 and local_step % 20 == 0)

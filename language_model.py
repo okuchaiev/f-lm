@@ -167,4 +167,5 @@ class LM(object):
             float16_non_rnn=False,
             average_params=True,
             run_profiler=False,
+            max_time=180,
 )
