@@ -142,3 +142,5 @@ def run_eval(dataset, hps, logdir, mode, num_eval_steps):
             summary.value.add(tag='eval/perplexity', simple_value=np.exp(log_perplexity))
             sw.add_summary(summary, global_step)
             sw.flush()
+            if mode == "eval_full":
+                break #we don't need to wait for other checkpoints in this mode
