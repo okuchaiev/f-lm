@@ -25,11 +25,11 @@ class DataUtilsTestCase(unittest.TestCase):
                 counts[v] += 1
 
         counts2 = [0] * 10
-        for x, y, w in dataset._iterate(generator(), 2, 4):
+        for x, y in dataset._iterate(generator(), 2, 4):
             for v in x.ravel():
                 counts2[v] += 1
         for i in range(1, 10):
-            self.assertEqual(counts[i], counts2[i], "Mismatch at i=%d" % i)
+            self.assertEqual(counts[i], counts2[i], "Mismatch at i=%d. counts[i]=%s, counts2[i]=%s" % (i,counts[i], counts2[i]))
 
 if __name__ == '__main__':
     unittest.main()

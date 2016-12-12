@@ -94,7 +94,8 @@ class Dataset(object):
         x = np.zeros([batch_size, num_steps], np.int32)
         y = np.zeros([batch_size, num_steps], np.int32)
         #w = np.zeros([batch_size, num_steps], np.uint8)
-        while True:
+        do_iters = True
+        while do_iters:
             x[:] = 0
             y[:] = 0
             #w[:] = 0
@@ -111,7 +112,7 @@ class Dataset(object):
                         streams[i] = streams[i][num_tokens:]
                         tokens_filled += num_tokens
                 except StopIteration:
-                    pass
+                    do_iters = False
             #if not np.any(w):
             #    return
 
@@ -127,11 +128,14 @@ class Dataset(object):
 
     def iterate_forever(self, batch_size, num_steps):
         def file_stream():
+            epoch_num = 0
             while True:
                 file_patterns = glob.glob(self._file_pattern)
                 if not self._deterministic:
                     random.shuffle(file_patterns)
                 for file_name in file_patterns:
                     yield file_name
+                print('Done epoch: %s' % epoch_num)
+                epoch_num += 1                
         for value in self._iterate(self._sentence_stream(file_stream()), batch_size, num_steps):
             yield value
