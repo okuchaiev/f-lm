@@ -29,7 +29,7 @@ class LM(object):
                     tower_grads += [cur_grads]
 
         self.loss = tf.add_n(losses) / len(losses)
-        tf.scalar_summary("model/loss", self.loss)
+        tf.summary.scalar("model/loss", self.loss)
 
         self.global_step = tf.get_variable("global_step", [], tf.int32, initializer=tf.zeros_initializer,
                                            trainable=False)
@@ -38,7 +38,7 @@ class LM(object):
             grads = average_grads(tower_grads)
             optimizer = tf.train.AdagradOptimizer(hps.learning_rate, initial_accumulator_value=1.0)
             self.train_op = optimizer.apply_gradients(grads, global_step=self.global_step)
-            self.summary_op = tf.merge_all_summaries()
+            self.summary_op = tf.summary.merge_all()
         else:
             self.train_op = tf.no_op()
 
@@ -133,9 +133,9 @@ class LM(object):
         assert len(clipped_grads) == len(orig_grads)
 
         if summaries:
-            tf.scalar_summary("model/lstm_grad_norm", lstm_norm)
-            tf.scalar_summary("model/lstm_grad_scale", tf.minimum(hps.max_grad_norm / lstm_norm, 1.0))
-            tf.scalar_summary("model/lstm_weight_norm", tf.global_norm(lstm_vars))
+            tf.summary.scalar("model/lstm_grad_norm", lstm_norm)
+            tf.summary.scalar("model/lstm_grad_scale", tf.minimum(hps.max_grad_norm / lstm_norm, 1.0))
+            tf.summary.scalar("model/lstm_weight_norm", tf.global_norm(lstm_vars))
             for v, g, cg in zip(all_vars, orig_grads, clipped_grads):
                 name = v.name.lstrip("model/")
                 variable_summaries(v, 'weights' , name)

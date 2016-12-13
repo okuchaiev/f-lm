@@ -8,14 +8,14 @@ def variable_summaries(var, groupname, name):
     with tf.name_scope('summaries'):
         s_var = tf.cast(var, tf.float32)
         amean = tf.reduce_mean(tf.abs(s_var))
-        tf.scalar_summary(groupname + '/amean/' + name, amean)
+        tf.summary.scalar(groupname + '/amean/' + name, amean)
         mean = tf.reduce_mean(s_var)
-        tf.scalar_summary(groupname + '/mean/' + name, mean)
+        tf.summary.scalar(groupname + '/mean/' + name, mean)
         with tf.name_scope(groupname + '/stddev'):
             stddev = tf.sqrt(tf.reduce_sum(tf.square(s_var - mean)))
-        tf.scalar_summary(groupname + '/sttdev/' + name, stddev)
-        tf.scalar_summary(groupname + '/max/' + name, tf.reduce_max(s_var))
-        tf.scalar_summary(groupname + '/min/' + name, tf.reduce_min(s_var))
+        tf.summary.scalar(groupname + '/sttdev/' + name, stddev)
+        tf.summary.scalar(groupname + '/max/' + name, tf.reduce_max(s_var))
+        tf.summary.scalar(groupname + '/min/' + name, tf.reduce_min(s_var))
         #tf.histogram_summary(name, var)
 
 def getdtype(hps, is_rnn=False):
@@ -72,7 +72,8 @@ def _get_concat_variable(name, shape, dtype, num_shards):
 
 class LSTMCell(tf.nn.rnn_cell.RNNCell):
 
-    def __init__(self, num_units, input_size, initializer=None, num_proj=None, num_shards=1, dtype=tf.float32):
+    def __init__(self, num_units, input_size, initializer=None,
+                 num_proj=None, num_shards=1, dtype=tf.float32):
         self._num_units = num_units
         self._initializer = initializer
         self._num_proj = num_proj
