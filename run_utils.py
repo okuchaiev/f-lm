@@ -108,14 +108,15 @@ def run_eval(dataset, hps, logdir, mode, num_eval_steps):
                             intra_op_parallelism_threads=20,
                             inter_op_parallelism_threads=1)
     sess = tf.Session(config=config)
-    sw = tf.train.SummaryWriter(logdir + "/" + mode, sess.graph)
+    sw = tf.summary.FileWriter(logdir + "/" + mode, sess.graph)
     ckpt_loader = CheckpointLoader(saver, model.global_step, logdir + "/train")
 
     with sess.as_default():
         while ckpt_loader.load_checkpoint():
             global_step = ckpt_loader.last_global_step
             data_iterator = dataset.iterate_once(hps.batch_size * hps.num_gpus, hps.num_steps)
-            tf.initialize_local_variables().run()
+            #tf.initialize_local_variables().run()
+            tf.local_variables_initializer().run()
             loss_nom = 0.0
             loss_den = 0.0
             #for i, (x, y, w) in enumerate(data_iterator):
