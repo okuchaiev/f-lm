@@ -36,14 +36,14 @@ class LM(object):
 
         if mode == "train":
             grads = average_grads(tower_grads)
-             if hps.optimizer == 1:
-                    optimizer = tf.train.MomentumOptimizer(hps.learning_rate, 0.9)
-                elif hps.optimizer == 2:
-                    optimizer = tf.train.AdamOptimizer(hps.learning_rate)
-                elif hps.optimizer == 3:
-                    optimizer = tf.train.RMSPropOptimizer(learning_rate=hps.learning_rate)
-                else:
-                    optimizer = tf.train.AdagradOptimizer(hps.learning_rate, initial_accumulator_value=1.0)
+            if hps.optimizer == 1:
+                optimizer = tf.train.MomentumOptimizer(hps.learning_rate, 0.9)
+            elif hps.optimizer == 2:
+                optimizer = tf.train.AdamOptimizer(hps.learning_rate)
+            elif hps.optimizer == 3:
+                optimizer = tf.train.RMSPropOptimizer(learning_rate=hps.learning_rate)
+            else:
+                optimizer = tf.train.AdagradOptimizer(hps.learning_rate, initial_accumulator_value=1.0)
             self.train_op = optimizer.apply_gradients(grads, global_step=self.global_step)
             self.summary_op = tf.summary.merge_all()
         else:
