@@ -28,8 +28,11 @@ def run_train(dataset, hps, logdir, ps_device, task=0, master=""):
                              logdir=logdir,
                              summary_op=None,  # Automatic summaries don't work with placeholders.
                              global_step=model.global_step,
-                             save_summaries_secs=30,
-                             save_model_secs=120 * 5)
+                             save_summaries_secs=120,
+                             save_model_secs=120*7)
+                             #save_summaries_secs=30,
+                             #save_model_secs=120 * 5)
+                             
 
     config = tf.ConfigProto(allow_soft_placement=True,
                             intra_op_parallelism_threads=2,
@@ -95,7 +98,8 @@ def run_eval(dataset, hps, logdir, mode, num_eval_steps):
     with tf.variable_scope("model"):
         hps.num_sampled = 0  # Always using full softmax at evaluation.
         hps.keep_prob = 1.0
-        model = LM(hps, "eval", "/cpu:0")
+        #model = LM(hps, "eval", "/cpu:0")
+        model = LM(hps, "eval", "/gpu:0")
 
     if hps.average_params:
         print("Averaging parameters for evaluation.")

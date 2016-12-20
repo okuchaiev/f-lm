@@ -5,17 +5,17 @@ def variable_summaries(var, groupname, name):
     """Attach a lot of summaries to a Tensor.
         This is also quite expensive.
     """
-    with tf.name_scope('summaries'):
+    with tf.name_scope(None):
         s_var = tf.cast(var, tf.float32)
         amean = tf.reduce_mean(tf.abs(s_var))
         tf.summary.scalar(groupname + '/amean/' + name, amean)
-        mean = tf.reduce_mean(s_var)
-        tf.summary.scalar(groupname + '/mean/' + name, mean)
-        with tf.name_scope(groupname + '/stddev'):
-            stddev = tf.sqrt(tf.reduce_sum(tf.square(s_var - mean)))
-        tf.summary.scalar(groupname + '/sttdev/' + name, stddev)
-        tf.summary.scalar(groupname + '/max/' + name, tf.reduce_max(s_var))
-        tf.summary.scalar(groupname + '/min/' + name, tf.reduce_min(s_var))
+        #mean = tf.reduce_mean(s_var)
+        #tf.summary.scalar('mean/' + name, mean)
+        #with tf.name_scope('stddev'):
+        #    stddev = tf.sqrt(tf.reduce_sum(tf.square(s_var - mean)))
+        #    tf.summary.scalar('sttdev/' + name, stddev)
+        #tf.summary.scalar('max/' + name, tf.reduce_max(s_var))
+        #tf.summary.scalar('min/' + name, tf.reduce_min(s_var))
         #tf.histogram_summary(name, var)
 
 def getdtype(hps, is_rnn=False):
@@ -39,7 +39,7 @@ def sharded_variable(name, shape, num_shards, dtype=tf.float32, transposed=False
         initializer = tf.uniform_unit_scaling_initializer(dtype=dtype)
     else:        
         initializer = tf.uniform_unit_scaling_initializer(dtype=dtype)
-    return [tf.get_variable(name + "_%d" % i, [shard_size, shape[1]],
+    return [tf.get_variable(name + "_" + str(i), [shard_size, shape[1]],
                             initializer=initializer, dtype=dtype) for i in range(num_shards)]
 
 
