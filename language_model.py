@@ -147,7 +147,7 @@ class LM(object):
                 for v, g, cg in zip(all_vars, orig_grads, clipped_grads):                
                     name = v.name[6:]                
                     variable_summaries(v, 'weights' , name)
-                    variable_summaries(g, 'gradients', name)
+                    #variable_summaries(g, 'gradients', name)
                     variable_summaries(cg, 'clipped_grads', name)
 
         return list(zip(clipped_grads, all_vars))
