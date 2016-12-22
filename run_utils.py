@@ -33,7 +33,7 @@ def run_train(dataset, hps, logdir, ps_device, task=0, master=""):
                              #save_summaries_secs=30,
                              #save_model_secs=120 * 5)
                              
-
+tf.summary.FileWriter(logdir + "/" + mode, sess.graph)
     config = tf.ConfigProto(allow_soft_placement=True,
                             intra_op_parallelism_threads=2,
                             inter_op_parallelism_threads=20)

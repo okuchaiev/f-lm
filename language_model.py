@@ -140,14 +140,15 @@ class LM(object):
         assert len(clipped_grads) == len(orig_grads)
 
         if summaries:
-            tf.summary.scalar("model/lstm_grad_norm", lstm_norm)
-            tf.summary.scalar("model/lstm_grad_scale", tf.minimum(hps.max_grad_norm / lstm_norm, 1.0))
-            tf.summary.scalar("model/lstm_weight_norm", tf.global_norm(lstm_vars))
-            for v, g, cg in zip(all_vars, orig_grads, clipped_grads):                
-                name = v.name[6:]                
-                variable_summaries(v, 'weights' , name)
-                variable_summaries(g, 'gradients', name)
-                variable_summaries(cg, 'clipped_grads', name)
+            with tf.device("/cpu:0"):
+                tf.summary.scalar("model/lstm_grad_norm", lstm_norm)
+                tf.summary.scalar("model/lstm_grad_scale", tf.minimum(hps.max_grad_norm / lstm_norm, 1.0))
+                tf.summary.scalar("model/lstm_weight_norm", tf.global_norm(lstm_vars))
+                for v, g, cg in zip(all_vars, orig_grads, clipped_grads):                
+                    name = v.name[6:]                
+                    variable_summaries(v, 'weights' , name)
+                    variable_summaries(g, 'gradients', name)
+                    variable_summaries(cg, 'clipped_grads', name)
 
         return list(zip(clipped_grads, all_vars))
 
