@@ -9,14 +9,13 @@ def variable_summaries(var, groupname, name):
         s_var = tf.cast(var, tf.float32)
         amean = tf.reduce_mean(tf.abs(s_var))
         tf.summary.scalar(groupname + '/amean/' + name, amean)
-        #mean = tf.reduce_mean(s_var)
-        #tf.summary.scalar('mean/' + name, mean)
-        #with tf.name_scope('stddev'):
-        #    stddev = tf.sqrt(tf.reduce_sum(tf.square(s_var - mean)))
-        #    tf.summary.scalar('sttdev/' + name, stddev)
-        #tf.summary.scalar('max/' + name, tf.reduce_max(s_var))
-        #tf.summary.scalar('min/' + name, tf.reduce_min(s_var))
-        #tf.histogram_summary(name, var)
+        mean = tf.reduce_mean(s_var)
+        tf.summary.scalar(groupname + '/mean/' + name, mean)
+        stddev = tf.sqrt(tf.reduce_sum(tf.square(s_var - mean)))
+        tf.summary.scalar(groupname + '/sttdev/' + name, stddev)
+        tf.summary.scalar(groupname + '/max/' + name, tf.reduce_max(s_var))
+        tf.summary.scalar(groupname + '/min/' + name, tf.reduce_min(s_var))
+        tf.summary.histogram(groupname + "/" + name, var)
 
 def getdtype(hps, is_rnn=False):
     if is_rnn:
