@@ -144,11 +144,24 @@ class LM(object):
                 tf.summary.scalar("model/lstm_grad_norm", lstm_norm)
                 tf.summary.scalar("model/lstm_grad_scale", tf.minimum(hps.max_grad_norm / lstm_norm, 1.0))
                 tf.summary.scalar("model/lstm_weight_norm", tf.global_norm(lstm_vars))
-                for v, g, cg in zip(all_vars, orig_grads, clipped_grads):                
-                    name = v.name[6:]                
-                    variable_summaries(v, 'weights' , name)
-                    #variable_summaries(g, 'gradients', name)
-                    variable_summaries(cg, 'clipped_grads', name)
+                #embeding vars and grads
+                for v, g in zip(emb_vars, emb_grads):
+                    name = v.name[6:]
+                    gname = 'dLoss_by_' + name
+                    variable_summaries(v, "Embedding_weights", name)
+                    variable_summaries(g, "Embedding_gradients", gname)
+                #LSTM vars and gradients
+                for v, g in zip(lstm_vars, lstm_grads):
+                    name = v.name[6:]
+                    gname = 'dLoss_by_' + name
+                    variable_summaries(v, "LSTM_weights", name)
+                    variable_summaries(g, "LSTM_gradients", gname)
+                #softmax vars and gradients
+                for v, g in zip(softmax_vars, softmax_grads):
+                    name = v.name[6:]
+                    gname = 'dLoss_by_' + name
+                    variable_summaries(v, "Softmax_weights", name)
+                    variable_summaries(g, "Softmax_gradients", gname)
 
         return list(zip(clipped_grads, all_vars))
 

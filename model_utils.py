@@ -15,7 +15,7 @@ def variable_summaries(var, groupname, name):
         tf.summary.scalar(groupname + '/sttdev/' + name, stddev)
         tf.summary.scalar(groupname + '/max/' + name, tf.reduce_max(s_var))
         tf.summary.scalar(groupname + '/min/' + name, tf.reduce_min(s_var))
-        tf.summary.histogram(groupname + "/" + name, var)
+        tf.summary.histogram(groupname + "/" + name, s_var)
 
 def getdtype(hps, is_rnn=False):
     if is_rnn:
