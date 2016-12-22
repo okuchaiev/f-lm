@@ -5,7 +5,7 @@ def variable_summaries(var, groupname, name):
     """Attach a lot of summaries to a Tensor.
         This is also quite expensive.
     """
-    with tf.name_scope(None):
+    with tf.device("/cpu:0"), tf.name_scope(None):
         s_var = tf.cast(var, tf.float32)
         amean = tf.reduce_mean(tf.abs(s_var))
         tf.summary.scalar(groupname + '/amean/' + name, amean)
