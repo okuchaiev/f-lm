@@ -33,9 +33,10 @@ def run_train(dataset, hps, logdir, ps_device, task=0, master=""):
                              #save_summaries_secs=30,
                              #save_model_secs=120 * 5)
 
-    config = tf.ConfigProto(allow_soft_placement=True,
-                            intra_op_parallelism_threads=2,
-                            inter_op_parallelism_threads=20)
+    #config = tf.ConfigProto(allow_soft_placement=True,
+    #                        intra_op_parallelism_threads=2,
+    #                        inter_op_parallelism_threads=20)
+    config = tf.ConfigProto(allow_soft_placement=True)
     with sv.managed_session(master, config=config) as sess:
         # Slowly increase the number of workers during beginning of the training.
         while not sv.should_stop() and (time.time() - stime) < hps.max_time:
