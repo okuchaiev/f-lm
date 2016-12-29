@@ -108,9 +108,10 @@ def run_eval(dataset, hps, logdir, mode, num_eval_steps):
         saver = tf.train.Saver()
 
     # Use only 4 threads for the evaluation.
-    config = tf.ConfigProto(allow_soft_placement=True,
-                            intra_op_parallelism_threads=20,
-                            inter_op_parallelism_threads=1)
+    #config = tf.ConfigProto(allow_soft_placement=True,
+    #                        intra_op_parallelism_threads=20,
+    #                        inter_op_parallelism_threads=1)
+    config = tf.ConfigProto(allow_soft_placement=True)
     sess = tf.Session(config=config)
     sw = tf.summary.FileWriter(logdir + "/" + mode, sess.graph)
     ckpt_loader = CheckpointLoader(saver, model.global_step, logdir + "/train")
