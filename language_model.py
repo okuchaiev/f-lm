@@ -28,7 +28,7 @@ class LM(object):
                 loss = self._forward(i, xs[i], ys[i])
                 losses += [loss]
                 if mode == "train":
-                    cur_grads = self._backward(loss, summaries=(i == hps.num_gpus - 1))
+                    cur_grads = self._backward(loss, hps.do_summaries and summaries=(i == hps.num_gpus - 1))
                     tower_grads += [cur_grads]
 
         self.loss = tf.add_n(losses) / len(losses)
@@ -205,6 +205,7 @@ class LM(object):
             float16_non_rnn=False,
             average_params=True,
             run_profiler=False,
+            do_summaries=False,
             max_time=180,
 
             fact_size=0,
