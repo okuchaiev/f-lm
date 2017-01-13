@@ -194,7 +194,8 @@ class FLSTMCell(tf.contrib.rnn.RNNCell):
             # i = input_gate, j = new_input, f = forget_gate, o = output_gate
             cell_inputs = tf.concat([inputs, m_prev], 1)
             if self._factor_size:
-                lstm_matrix = tf.nn.bias_add(tf.matmul(cell_inputs, tf.matmul(self._concat_w1, self._concat_w2)), self._b)
+                #lstm_matrix = tf.nn.bias_add(tf.matmul(cell_inputs, tf.matmul(self._concat_w1, self._concat_w2)), self._b)
+                lstm_matrix = tf.nn.bias_add(tf.matmul(tf.matmul(cell_inputs, self._concat_w1), self._concat_w2), self._b)
             else:
                 lstm_matrix = tf.nn.bias_add(tf.matmul(cell_inputs, self._concat_w), self._b)
             #i, j, f, o = tf.split(1, 4, lstm_matrix)
