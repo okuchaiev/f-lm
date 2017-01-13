@@ -75,8 +75,8 @@ def average_grads(tower_grads):
         for g, _ in grad_and_vars:
             indices += [g.indices]
             values += [g.values]
-        indices = tf.concat(0, indices)
-        values = tf.concat(0, values)
+        indices = tf.concat(indices, 0)
+        values = tf.concat(values, 0)
         return tf.IndexedSlices(values, indices, grad_and_vars[0][0].dense_shape)
 
     average_grads = []

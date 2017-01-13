@@ -55,7 +55,7 @@ def run_train(dataset, hps, logdir, ps_device, task=0, master=""):
         while not sv.should_stop() and (time.time() - stime) < hps.max_time:
             fetches = [model.global_step, model.loss, model.train_op]
             # Chief worker computes summaries every 20 steps.
-            should_compute_summary = (task == 0 and local_step > 0 and local_step % 20 == 0)
+            should_compute_summary = (task == 0  and local_step % 100 == 0)
             if should_compute_summary:
                 fetches += [model.summary_op]
 

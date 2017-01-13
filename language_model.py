@@ -1,8 +1,9 @@
 import tensorflow as tf
 
-from model_utils import sharded_variable, LSTMCell, getdtype, variable_summaries
+from model_utils import sharded_variable, getdtype, variable_summaries
 from common import assign_to_gpu, average_grads, find_trainable_variables
 from hparams import HParams
+from model_utils import LSTMCell, FLSTMCell
 
 
 class LM(object):
@@ -15,8 +16,10 @@ class LM(object):
 
         losses = []
         tower_grads = []
-        xs = tf.split(0, hps.num_gpus, self.x)
-        ys = tf.split(0, hps.num_gpus, self.y)
+        #xs = tf.split(0, hps.num_gpus, self.x)
+        xs = tf.split(self.x, hps.num_gpus, 0)
+        #ys = tf.split(0, hps.num_gpus, self.y)
+        ys = tf.split(self.y, hps.num_gpus, 0)
         #ws = tf.split(0, hps.num_gpus, self.w)
         for i in range(hps.num_gpus):
             with tf.device(assign_to_gpu(i, ps_device)), tf.variable_scope(tf.get_variable_scope(),
@@ -31,8 +34,7 @@ class LM(object):
         self.loss = tf.add_n(losses) / len(losses)
         tf.summary.scalar("model/loss", self.loss)
 
-        self.global_step = tf.get_variable("global_step", [], tf.int32, initializer=tf.zeros_initializer,
-                                           trainable=False)
+        self.global_step = tf.get_variable("global_step", [], tf.int32, trainable=False)
 
         if mode == "train":
             grads = average_grads(tower_grads)
@@ -77,11 +79,24 @@ class LM(object):
         if hps.keep_prob < 1.0:
             x = tf.nn.dropout(x, hps.keep_prob)
 
-        inputs =  [tf.squeeze(tf.cast(v, getdtype(hps, True)), [1]) for v in tf.split(1, hps.num_steps, x)]
+        #inputs =  [tf.squeeze(tf.cast(v, getdtype(hps, True)), [1]) for v in tf.split(1, hps.num_steps, x)]
+        inputs =  [tf.squeeze(tf.cast(v, getdtype(hps, True)), [1]) for v in tf.split(x, hps.num_steps, 1)]
 
         for i in range(hps.num_layers):
             with tf.variable_scope("lstm_%d" % i):
-                cell = LSTMCell(hps.state_size, hps.emb_size, num_proj=hps.projected_size, dtype=getdtype(hps, True))
+                #if hps.fact_size!=0:
+                #    cell = FLSTMCell(hps.state_size, hps.emb_size, num_proj=hps.projected_size, fact_size=hps.fact_size, dtype=getdtype(hps, True))
+                #else:
+                """
+                  def __init__(self, num_units, input_size=None,
+               use_peepholes=False, cell_clip=None,
+               initializer=None, num_proj=None, proj_clip=None,
+               num_unit_shards=None, num_proj_shards=None,
+               forget_bias=1.0, state_is_tuple=True,
+               activation=tanh)
+                """
+                #cell = LSTMCell(hps.state_size, hps.emb_size, num_proj=hps.projected_size, dtype=getdtype(hps, True))
+                cell = FLSTMCell(hps.state_size, hps.emb_size, num_proj=hps.projected_size, factor_size=hps.fact_size, dtype=getdtype(hps, True))
 
             state = self.initial_states[i]
             for t in range(hps.num_steps):
@@ -92,7 +107,8 @@ class LM(object):
             with tf.control_dependencies([self.initial_states[i].assign(state)]):
                 inputs[t] = tf.identity(inputs[t])
 
-        inputs = tf.reshape(tf.concat(1, inputs), [-1, hps.projected_size])
+        #inputs = tf.reshape(tf.concat(1, inputs), [-1, hps.projected_size])
+        inputs = tf.reshape(tf.concat(inputs, 1), [-1, hps.projected_size])
 
         # Initialization ignores the fact that softmax_w is transposed. Twhat worked slightly better.
         softmax_w = sharded_variable("softmax_w", [hps.vocab_size, hps.projected_size], hps.num_shards)
@@ -107,8 +123,8 @@ class LM(object):
             loss = tf.nn.sparse_softmax_cross_entropy_with_logits(logits, targets)
         else:
             targets = tf.reshape(y, [-1, 1])
-            loss = tf.nn.sampled_softmax_loss(softmax_w, softmax_b, tf.to_float(inputs),
-                                              targets, hps.num_sampled, hps.vocab_size)
+            loss = tf.nn.sampled_softmax_loss(softmax_w, softmax_b, targets, tf.to_float(inputs),
+                                               hps.num_sampled, hps.vocab_size)
         #loss = tf.reduce_mean(loss * tf.reshape(w, [-1]))
         loss = tf.reduce_mean(loss)
         return loss
@@ -190,4 +206,6 @@ class LM(object):
             average_params=True,
             run_profiler=False,
             max_time=180,
+
+            fact_size=0,
 )

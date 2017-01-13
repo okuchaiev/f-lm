@@ -69,7 +69,7 @@ def _get_concat_variable(name, shape, dtype, num_shards):
     return tf.concat(0, _sharded_variable)
 
 
-class LSTMCell(tf.nn.rnn_cell.RNNCell):
+class LSTMCell(tf.contrib.rnn.RNNCell):
 
     def __init__(self, num_units, input_size, initializer=None,
                  num_proj=None, num_shards=1, dtype=tf.float32):
@@ -93,8 +93,7 @@ class LSTMCell(tf.nn.rnn_cell.RNNCell):
                 dtype, self._num_unit_shards)
 
             self._b = tf.get_variable(
-                "B", shape=[4 * self._num_units],
-                initializer=tf.zeros_initializer, dtype=dtype)
+                "B", shape=[4 * self._num_units])
 
             self._concat_w_proj = _get_concat_variable(
                 "W_P", [self._num_units, self._num_proj],
@@ -120,9 +119,10 @@ class LSTMCell(tf.nn.rnn_cell.RNNCell):
         with tf.variable_scope(type(self).__name__,
                                initializer=self._initializer):  # "LSTMCell"
             # i = input_gate, j = new_input, f = forget_gate, o = output_gate
-            cell_inputs = tf.concat(1, [inputs, m_prev])
+            cell_inputs = tf.concat([inputs, m_prev], 1)
             lstm_matrix = tf.nn.bias_add(tf.matmul(cell_inputs, self._concat_w), self._b)
-            i, j, f, o = tf.split(1, 4, lstm_matrix)
+            #i, j, f, o = tf.split(1, 4, lstm_matrix)
+            i, j, f, o = tf.split(lstm_matrix, 4, 1)
 
             c = tf.sigmoid(f + 1.0) * c_prev + tf.sigmoid(i) * tf.tanh(j)
             m = tf.sigmoid(o) * tf.tanh(c)
@@ -130,5 +130,81 @@ class LSTMCell(tf.nn.rnn_cell.RNNCell):
             if self._num_proj is not None:
                 m = tf.matmul(m, self._concat_w_proj)
 
-        new_state = tf.concat(1, [c, m])
+        new_state = tf.concat([c, m], 1)
         return m, new_state
+
+class FLSTMCell(tf.contrib.rnn.RNNCell):
+
+    def __init__(self, num_units, input_size, initializer=None,
+                 num_proj=None, num_shards=1, factor_size=None, dtype=tf.float32):
+        self._num_units = num_units
+        self._initializer = initializer
+        self._num_proj = num_proj
+        self._num_unit_shards = num_shards
+        self._num_proj_shards = num_shards
+        self._forget_bias = 1.0
+        self._factor_size = factor_size
+
+        if num_proj:
+            self._state_size = num_units + num_proj
+            self._output_size = num_proj
+        else:
+            self._state_size = 2 * num_units
+            self._output_size = num_units
+
+        with tf.variable_scope("LSTMCell"):
+            if self._factor_size:
+                self._concat_w1 = _get_concat_variable(
+                    "W1", [input_size + num_proj, self._factor_size],
+                    dtype, self._num_unit_shards)
+                self._concat_w2 = _get_concat_variable(
+                    "W2", [self._factor_size, 4 * self._num_units],
+                    dtype, self._num_unit_shards)
+            else:
+                self._concat_w = _get_concat_variable(
+                    "W", [input_size + num_proj, 4 * self._num_units],
+                    dtype, self._num_unit_shards)
+
+            self._b = tf.get_variable(
+                "B", shape=[4 * self._num_units])
+
+            self._concat_w_proj = _get_concat_variable(
+                "W_P", [self._num_units, self._num_proj],
+                dtype, self._num_proj_shards)
+
+    @property
+    def state_size(self):
+        return self._state_size
+
+    @property
+    def output_size(self):
+        return self._output_size
+
+    def __call__(self, inputs, state, scope=None):
+        num_proj = self._num_units if self._num_proj is None else self._num_proj
+
+        c_prev = tf.slice(state, [0, 0], [-1, self._num_units])
+        m_prev = tf.slice(state, [0, self._num_units], [-1, num_proj])
+
+        input_size = inputs.get_shape().with_rank(2)[1]
+        if input_size.value is None:
+            raise ValueError("Could not infer input size from inputs.get_shape()[-1]")
+        with tf.variable_scope(type(self).__name__,
+                               initializer=self._initializer):  # "LSTMCell"
+            # i = input_gate, j = new_input, f = forget_gate, o = output_gate
+            cell_inputs = tf.concat([inputs, m_prev], 1)
+            if self._factor_size:
+                lstm_matrix = tf.nn.bias_add(tf.matmul(cell_inputs, tf.matmul(self._concat_w1, self._concat_w2)), self._b)
+            else:
+                lstm_matrix = tf.nn.bias_add(tf.matmul(cell_inputs, self._concat_w), self._b)
+            #i, j, f, o = tf.split(1, 4, lstm_matrix)
+            i, j, f, o = tf.split(lstm_matrix, 4, 1)
+
+            c = tf.sigmoid(f + 1.0) * c_prev + tf.sigmoid(i) * tf.tanh(j)
+            m = tf.sigmoid(o) * tf.tanh(c)
+
+            if self._num_proj is not None:
+                m = tf.matmul(m, self._concat_w_proj)
+
+        new_state = tf.concat([c, m], 1)
+        return m, new_state        
