@@ -96,7 +96,15 @@ class LM(object):
                activation=tanh)
                 """
                 #cell = LSTMCell(hps.state_size, hps.emb_size, num_proj=hps.projected_size, dtype=getdtype(hps, True))
-                cell = FLSTMCell(hps.state_size, hps.emb_size, num_proj=hps.projected_size, factor_size=hps.fact_size, dtype=getdtype(hps, True))
+                if hps.fnon_linearity=="sigmoid":
+                    print('Using sigmoid fnonlinearity')
+                    cell = FLSTMCell(hps.state_size, hps.emb_size, num_proj=hps.projected_size, factor_size=hps.fact_size, fnon_linearity=tf.sigmoid, dtype=getdtype(hps, True))
+                elif hps.fnon_linearity=="relu":
+                    print('Using relu fnonlinearity')
+                    cell = FLSTMCell(hps.state_size, hps.emb_size, num_proj=hps.projected_size, factor_size=hps.fact_size, fnon_linearity=tf.nn.relu, dtype=getdtype(hps, True))
+                else:
+                    print('Not using fnonlinearities')
+                    cell = FLSTMCell(hps.state_size, hps.emb_size, num_proj=hps.projected_size, factor_size=hps.fact_size, dtype=getdtype(hps, True))
 
             state = self.initial_states[i]
             for t in range(hps.num_steps):
@@ -209,4 +217,5 @@ class LM(object):
             max_time=180,
 
             fact_size=0,
+            fnon_linearity="sigmoid"
 )

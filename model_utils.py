@@ -136,7 +136,7 @@ class LSTMCell(tf.contrib.rnn.RNNCell):
 class FLSTMCell(tf.contrib.rnn.RNNCell):
 
     def __init__(self, num_units, input_size, initializer=None,
-                 num_proj=None, num_shards=1, factor_size=None, dtype=tf.float32):
+                 num_proj=None, num_shards=1, factor_size=None, fnon_linearity=None, dtype=tf.float32):
         self._num_units = num_units
         self._initializer = initializer
         self._num_proj = num_proj
@@ -144,6 +144,7 @@ class FLSTMCell(tf.contrib.rnn.RNNCell):
         self._num_proj_shards = num_shards
         self._forget_bias = 1.0
         self._factor_size = factor_size
+        self._fnon_linearity = fnon_linearity
 
         if num_proj:
             self._state_size = num_units + num_proj
@@ -160,6 +161,8 @@ class FLSTMCell(tf.contrib.rnn.RNNCell):
                 self._concat_w2 = _get_concat_variable(
                     "W2", [self._factor_size, 4 * self._num_units],
                     dtype, self._num_unit_shards)
+                if self._fnon_linearity:
+                    self._b1 = tf.get_variable(name="b1", shape = [self._factor_size])
             else:
                 self._concat_w = _get_concat_variable(
                     "W", [input_size + num_proj, 4 * self._num_units],
@@ -195,7 +198,12 @@ class FLSTMCell(tf.contrib.rnn.RNNCell):
             cell_inputs = tf.concat([inputs, m_prev], 1)
             if self._factor_size:
                 #lstm_matrix = tf.nn.bias_add(tf.matmul(cell_inputs, tf.matmul(self._concat_w1, self._concat_w2)), self._b)
-                lstm_matrix = tf.nn.bias_add(tf.matmul(tf.matmul(cell_inputs, self._concat_w1), self._concat_w2), self._b)
+                if self._fnon_linearity:
+                    lstm_matrix = tf.nn.bias_add(tf.matmul(
+                        self._fnon_linearity(tf.bias_add(tf.matmul(cell_inputs, self._concat_w1),self._b1)), 
+                        self._concat_w2), self._b)
+                else:
+                    lstm_matrix = tf.nn.bias_add(tf.matmul(tf.matmul(cell_inputs, self._concat_w1), self._concat_w2), self._b)
             else:
                 lstm_matrix = tf.nn.bias_add(tf.matmul(cell_inputs, self._concat_w), self._b)
             #i, j, f, o = tf.split(1, 4, lstm_matrix)
