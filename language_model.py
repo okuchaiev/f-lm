@@ -28,7 +28,7 @@ class LM(object):
                 loss = self._forward(i, xs[i], ys[i])
                 losses += [loss]
                 if mode == "train":
-                    cur_grads = self._backward(loss, hps.do_summaries and summaries=(i == hps.num_gpus - 1))
+                    cur_grads = self._backward(loss,  summaries=((i == hps.num_gpus - 1) and hps.do_summaries))
                     tower_grads += [cur_grads]
 
         self.loss = tf.add_n(losses) / len(losses)
@@ -115,12 +115,12 @@ class LM(object):
         softmax_b = tf.get_variable("softmax_b", [hps.vocab_size])
 
         if hps.num_sampled == 0:
-            full_softmax_w = tf.reshape(tf.concat(1, softmax_w), [-1, hps.projected_size])
+            full_softmax_w = tf.reshape(tf.concat(softmax_w, 1), [-1, hps.projected_size])
             full_softmax_w = full_softmax_w[:hps.vocab_size, :]
 
             logits = tf.matmul(tf.to_float(inputs), full_softmax_w, transpose_b=True) + softmax_b
             targets = tf.reshape(y, [-1])
-            loss = tf.nn.sparse_softmax_cross_entropy_with_logits(logits, targets)
+            loss = tf.nn.sparse_softmax_cross_entropy_with_logits(logits=logits, labels=targets)
         else:
             targets = tf.reshape(y, [-1, 1])
             loss = tf.nn.sampled_softmax_loss(softmax_w, softmax_b, targets, tf.to_float(inputs),
