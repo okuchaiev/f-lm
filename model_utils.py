@@ -200,7 +200,7 @@ class FLSTMCell(tf.contrib.rnn.RNNCell):
                 #lstm_matrix = tf.nn.bias_add(tf.matmul(cell_inputs, tf.matmul(self._concat_w1, self._concat_w2)), self._b)
                 if self._fnon_linearity:
                     lstm_matrix = tf.nn.bias_add(tf.matmul(
-                        self._fnon_linearity(tf.bias_add(tf.matmul(cell_inputs, self._concat_w1),self._b1)), 
+                        self._fnon_linearity(tf.nn.bias_add(tf.matmul(cell_inputs, self._concat_w1),self._b1)), 
                         self._concat_w2), self._b)
                 else:
                     lstm_matrix = tf.nn.bias_add(tf.matmul(tf.matmul(cell_inputs, self._concat_w1), self._concat_w2), self._b)
