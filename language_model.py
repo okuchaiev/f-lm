@@ -3,7 +3,7 @@ import tensorflow as tf
 from model_utils import sharded_variable, getdtype, variable_summaries
 from common import assign_to_gpu, average_grads, find_trainable_variables
 from hparams import HParams
-from model_utils import LSTMCell, FLSTMCell
+from model_utils import GLSTMCell, FLSTMCell
 
 
 class LM(object):
@@ -84,27 +84,20 @@ class LM(object):
 
         for i in range(hps.num_layers):
             with tf.variable_scope("lstm_%d" % i):
-                #if hps.fact_size!=0:
-                #    cell = FLSTMCell(hps.state_size, hps.emb_size, num_proj=hps.projected_size, fact_size=hps.fact_size, dtype=getdtype(hps, True))
-                #else:
-                """
-                  def __init__(self, num_units, input_size=None,
-               use_peepholes=False, cell_clip=None,
-               initializer=None, num_proj=None, proj_clip=None,
-               num_unit_shards=None, num_proj_shards=None,
-               forget_bias=1.0, state_is_tuple=True,
-               activation=tanh)
-                """
-                #cell = LSTMCell(hps.state_size, hps.emb_size, num_proj=hps.projected_size, dtype=getdtype(hps, True))
-                if hps.fnon_linearity=="sigmoid":
-                    print('Using sigmoid fnonlinearity')
-                    cell = FLSTMCell(hps.state_size, hps.emb_size, num_proj=hps.projected_size, factor_size=hps.fact_size, fnon_linearity=tf.sigmoid, dtype=getdtype(hps, True))
-                elif hps.fnon_linearity=="relu":
-                    print('Using relu fnonlinearity')
-                    cell = FLSTMCell(hps.state_size, hps.emb_size, num_proj=hps.projected_size, factor_size=hps.fact_size, fnon_linearity=tf.nn.relu, dtype=getdtype(hps, True))
+                if hps.num_of_groups > 0:
+                    print("Using %d groups" % hps.num_of_groups)                    
+                    cell = GLSTMCell(hps.state_size, hps.emb_size, num_proj=hps.projected_size, number_of_groups=hps.num_of_groups, dtype=getdtype(hps, True))
                 else:
-                    print('Not using fnonlinearities')
-                    cell = FLSTMCell(hps.state_size, hps.emb_size, num_proj=hps.projected_size, factor_size=hps.fact_size, dtype=getdtype(hps, True))
+                    print("Not using groups")
+                    if hps.fnon_linearity=="sigmoid":
+                        print('Using sigmoid fnonlinearity')
+                        cell = FLSTMCell(hps.state_size, hps.emb_size, num_proj=hps.projected_size, factor_size=hps.fact_size, fnon_linearity=tf.sigmoid, dtype=getdtype(hps, True))
+                    elif hps.fnon_linearity=="relu":
+                        print('Using relu fnonlinearity')
+                        cell = FLSTMCell(hps.state_size, hps.emb_size, num_proj=hps.projected_size, factor_size=hps.fact_size, fnon_linearity=tf.nn.relu, dtype=getdtype(hps, True))
+                    else:
+                        print('Not using fnonlinearities')
+                        cell = FLSTMCell(hps.state_size, hps.emb_size, num_proj=hps.projected_size, factor_size=hps.fact_size, dtype=getdtype(hps, True))
 
             state = self.initial_states[i]
             for t in range(hps.num_steps):
@@ -216,6 +209,7 @@ class LM(object):
             do_summaries=False,
             max_time=180,
 
-            fact_size=0,
-            fnon_linearity="sigmoid"
+            fact_size=None,
+            fnon_linearity="none",
+            num_of_groups=0,
 )

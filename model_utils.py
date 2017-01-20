@@ -69,72 +69,7 @@ def _get_concat_variable(name, shape, dtype, num_shards):
     return tf.concat(0, _sharded_variable)
 
 
-class LSTMCell(tf.contrib.rnn.RNNCell):
-
-    def __init__(self, num_units, input_size, initializer=None,
-                 num_proj=None, num_shards=1, dtype=tf.float32):
-        self._num_units = num_units
-        self._initializer = initializer
-        self._num_proj = num_proj
-        self._num_unit_shards = num_shards
-        self._num_proj_shards = num_shards
-        self._forget_bias = 1.0
-
-        if num_proj:
-            self._state_size = num_units + num_proj
-            self._output_size = num_proj
-        else:
-            self._state_size = 2 * num_units
-            self._output_size = num_units
-
-        with tf.variable_scope("LSTMCell"):
-            self._concat_w = _get_concat_variable(
-                "W", [input_size + num_proj, 4 * self._num_units],
-                dtype, self._num_unit_shards)
-
-            self._b = tf.get_variable(
-                "B", shape=[4 * self._num_units])
-
-            self._concat_w_proj = _get_concat_variable(
-                "W_P", [self._num_units, self._num_proj],
-                dtype, self._num_proj_shards)
-
-    @property
-    def state_size(self):
-        return self._state_size
-
-    @property
-    def output_size(self):
-        return self._output_size
-
-    def __call__(self, inputs, state, scope=None):
-        num_proj = self._num_units if self._num_proj is None else self._num_proj
-
-        c_prev = tf.slice(state, [0, 0], [-1, self._num_units])
-        m_prev = tf.slice(state, [0, self._num_units], [-1, num_proj])
-
-        input_size = inputs.get_shape().with_rank(2)[1]
-        if input_size.value is None:
-            raise ValueError("Could not infer input size from inputs.get_shape()[-1]")
-        with tf.variable_scope(type(self).__name__,
-                               initializer=self._initializer):  # "LSTMCell"
-            # i = input_gate, j = new_input, f = forget_gate, o = output_gate
-            cell_inputs = tf.concat([inputs, m_prev], 1)
-            lstm_matrix = tf.nn.bias_add(tf.matmul(cell_inputs, self._concat_w), self._b)
-            #i, j, f, o = tf.split(1, 4, lstm_matrix)
-            i, j, f, o = tf.split(lstm_matrix, 4, 1)
-
-            c = tf.sigmoid(f + 1.0) * c_prev + tf.sigmoid(i) * tf.tanh(j)
-            m = tf.sigmoid(o) * tf.tanh(c)
-
-            if self._num_proj is not None:
-                m = tf.matmul(m, self._concat_w_proj)
-
-        new_state = tf.concat([c, m], 1)
-        return m, new_state
-
 class FLSTMCell(tf.contrib.rnn.RNNCell):
-
     def __init__(self, num_units, input_size, initializer=None,
                  num_proj=None, num_shards=1, factor_size=None, fnon_linearity=None, dtype=tf.float32):
         self._num_units = num_units
@@ -216,4 +151,152 @@ class FLSTMCell(tf.contrib.rnn.RNNCell):
                 m = tf.matmul(m, self._concat_w_proj)
 
         new_state = tf.concat([c, m], 1)
-        return m, new_state        
+        return m, new_state
+
+
+class GLSTMCell(tf.contrib.rnn.RNNCell):
+    """LSTM cell with groups"""
+    def __init__(self, num_units, input_size, initializer=None,
+                 num_proj=None, num_shards=1, number_of_groups=1, dtype=tf.float32):
+        
+        self._num_units = num_units
+        self._initializer = initializer
+        self._num_proj = num_proj
+        self._num_unit_shards = num_shards
+        self._num_proj_shards = num_shards
+        self._forget_bias = 1.0
+        self._number_of_groups = number_of_groups
+
+        #currently we only support input and projection of the same size
+        assert(input_size == self._num_proj)
+        assert(input_size % self._number_of_groups == 0)
+        assert(self._num_units % self._number_of_groups == 0)
+        self._group_shape = [input_size / self._number_of_groups,
+                             self._num_units / self._number_of_groups]
+        print('LSTM cell group shape: ' + str(self._group_shape))
+
+        if num_proj:
+            self._state_size = num_units + num_proj
+            self._output_size = num_proj
+        else:
+            self._state_size = 2 * num_units
+            self._output_size = num_units
+
+        with tf.variable_scope("LSTMCell"):                       
+            """
+            self._Wis = []
+            self._Wjs = []
+            self._Wfs = []
+            self._Wos = []
+            """
+
+            self._Wks = []
+            for group_id in xrange(self._number_of_groups):
+                #adding group matrix reponsible for input part and
+                #group matrix responsible for state part of the input to glstm cell
+
+                #we fuse i, j, f, o gates, hence 4*self._group_shape[1], we also fuse inpt and state, hence 2*self._group_shape[0]
+                self._Wks.append(_get_concat_variable("W_" + str(group_id), [2*self._group_shape[0], 4*self._group_shape[1]], dtype, self._num_proj_shards))
+
+                """
+                self._Wis.append(_get_concat_variable("G_And_GP_i_" + str(group_id), [2*self._group_shape[0], self._group_shape[1]], dtype, self._num_proj_shards))
+                self._Wjs.append(_get_concat_variable("G_And_GP_j_" + str(group_id), [2*self._group_shape[0], self._group_shape[1]], dtype, self._num_proj_shards))
+                self._Wfs.append(_get_concat_variable("G_And_GP_f_" + str(group_id), [2*self._group_shape[0], self._group_shape[1]], dtype, self._num_proj_shards))
+                self._Wos.append(_get_concat_variable("G_And_GP_0_" + str(group_id), [2*self._group_shape[0], self._group_shape[1]], dtype, self._num_proj_shards))
+                """
+
+                """
+                self._Wis.append([_get_concat_variable("G_i_" + str(group_id), self._group_shape, dtype, self._num_proj_shards),
+                                  _get_concat_variable("GP_i_" + str(group_id), self._group_shape, dtype, self._num_proj_shards)])
+                self._Wjs.append([_get_concat_variable("G_j_" + str(group_id), self._group_shape, dtype, self._num_proj_shards),
+                                  _get_concat_variable("GP_j_" + str(group_id), self._group_shape, dtype, self._num_proj_shards)])
+                self._Wfs.append([_get_concat_variable("G_f_" + str(group_id), self._group_shape, dtype, self._num_proj_shards),
+                                  _get_concat_variable("GP_f_" + str(group_id), self._group_shape, dtype, self._num_proj_shards)])
+                self._Wos.append([_get_concat_variable("G_o_" + str(group_id), self._group_shape, dtype, self._num_proj_shards),
+                                  _get_concat_variable("GP_o_" + str(group_id), self._group_shape, dtype, self._num_proj_shards)])
+                """
+            
+            #biases for gates
+            self._b_i = tf.get_variable(
+                "B_i", shape=[self._num_units])
+            self._b_j = tf.get_variable(
+                "B_j", shape=[self._num_units])
+            self._b_f = tf.get_variable(
+                "B_f", shape=[self._num_units])
+            self._b_o = tf.get_variable(
+                "B_o", shape=[self._num_units])
+
+            #projection matrix
+            self._concat_w_proj = _get_concat_variable(
+                "W_P", [self._num_units, self._num_proj],
+                dtype, self._num_proj_shards)
+            
+
+
+    @property
+    def state_size(self):
+        return self._state_size
+
+    @property
+    def output_size(self):
+        return self._output_size
+
+    def _get_input_for_group(self, inpt, group_id, group_size):
+        return tf.slice(inpt, [0, group_id*group_size], [inpt.get_shape()[0].value, group_size])
+
+    def __call__(self, inputs, state, scope=None):
+        num_proj = self._num_units if self._num_proj is None else self._num_proj
+
+        c_prev = tf.slice(state, [0, 0], [-1, self._num_units])
+        m_prev = tf.slice(state, [0, self._num_units], [-1, num_proj])        
+
+        input_size = inputs.get_shape().with_rank(2)[1]
+        if input_size.value is None:
+            raise ValueError("Could not infer input size from inputs.get_shape()[-1]")
+        with tf.variable_scope(type(self).__name__,
+                               initializer=self._initializer):  # "LSTMCell"
+            # i = input_gate, j = new_input, f = forget_gate, o = output_gate
+            i_parts = []
+            j_parts = []
+            f_parts = []
+            o_parts = []
+
+            for group_id in xrange(self._number_of_groups):
+                x_g_id = tf.concat([self._get_input_for_group(inputs, group_id, self._group_shape[0]),
+                self._get_input_for_group(m_prev, group_id, self._group_shape[0])], axis =1)
+
+                R_k = tf.matmul(x_g_id, self._Wks[group_id], name="R_"+str(group_id))
+                i_k, j_k, f_k, o_k = tf.split(R_k, 4, 1)
+                i_parts.append(i_k)
+                j_parts.append(j_k)
+                f_parts.append(f_k)
+                o_parts.append(o_k)
+
+                """
+                i_parts.append(tf.matmul(x_g_id, self._Wis[group_id], axis=0)))
+                j_parts.append(tf.matmul(x_g_id, self._Wjs[group_id], axis=0)))
+                f_parts.append(tf.matmul(x_g_id, self._Wfs[group_id], axis=0)))
+                o_parts.append(tf.matmul(x_g_id, self._Wos[group_id], axis=0)))
+                """
+                
+                """
+                i_parts.append(tf.matmul(x_g_id, tf.concat([self._Wis[group_id][0], self._Wis[group_id][1]], axis=0)))
+                j_parts.append(tf.matmul(x_g_id, tf.concat([self._Wjs[group_id][0], self._Wjs[group_id][1]], axis=0)))
+                f_parts.append(tf.matmul(x_g_id, tf.concat([self._Wfs[group_id][0], self._Wfs[group_id][1]], axis=0)))
+                o_parts.append(tf.matmul(x_g_id, tf.concat([self._Wos[group_id][0], self._Wos[group_id][1]], axis=0)))
+                """
+            
+            i = tf.nn.bias_add(tf.concat(i_parts, axis=1), self._b_i)
+            j = tf.nn.bias_add(tf.concat(j_parts, axis=1), self._b_j)
+            f = tf.nn.bias_add(tf.concat(f_parts, axis=1), self._b_f)
+            o = tf.nn.bias_add(tf.concat(o_parts, axis=1), self._b_o)
+
+            c = tf.sigmoid(f + 1.0) * c_prev + tf.sigmoid(i) * tf.tanh(j)
+            m = tf.sigmoid(o) * tf.tanh(c)
+
+            if self._num_proj is not None:
+                m = tf.matmul(m, self._concat_w_proj)
+
+        new_state = tf.concat([c, m], 1)
+        return m, new_state
+
