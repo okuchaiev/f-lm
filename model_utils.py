@@ -70,6 +70,7 @@ def _get_concat_variable(name, shape, dtype, num_shards):
 
 
 class FLSTMCell(tf.contrib.rnn.RNNCell):
+    """LSTMCell with factorized matrix"""
     def __init__(self, num_units, input_size, initializer=None,
                  num_proj=None, num_shards=1, factor_size=None, fnon_linearity=None, dtype=tf.float32):
         self._num_units = num_units
@@ -131,17 +132,16 @@ class FLSTMCell(tf.contrib.rnn.RNNCell):
                                initializer=self._initializer):  # "LSTMCell"
             # i = input_gate, j = new_input, f = forget_gate, o = output_gate
             cell_inputs = tf.concat([inputs, m_prev], 1)
-            if self._factor_size:
-                #lstm_matrix = tf.nn.bias_add(tf.matmul(cell_inputs, tf.matmul(self._concat_w1, self._concat_w2)), self._b)
+            if self._factor_size:                
                 if self._fnon_linearity:
                     lstm_matrix = tf.nn.bias_add(tf.matmul(
-                        self._fnon_linearity(tf.bias_add(tf.matmul(cell_inputs, self._concat_w1),self._b1)), 
+                        self._fnon_linearity(tf.nn.bias_add(tf.matmul(cell_inputs, self._concat_w1),self._b1)), 
                         self._concat_w2), self._b)
                 else:
                     lstm_matrix = tf.nn.bias_add(tf.matmul(tf.matmul(cell_inputs, self._concat_w1), self._concat_w2), self._b)
             else:
                 lstm_matrix = tf.nn.bias_add(tf.matmul(cell_inputs, self._concat_w), self._b)
-            #i, j, f, o = tf.split(1, 4, lstm_matrix)
+
             i, j, f, o = tf.split(lstm_matrix, 4, 1)
 
             c = tf.sigmoid(f + 1.0) * c_prev + tf.sigmoid(i) * tf.tanh(j)
@@ -183,13 +183,6 @@ class GLSTMCell(tf.contrib.rnn.RNNCell):
             self._output_size = num_units
 
         with tf.variable_scope("LSTMCell"):                       
-            """
-            self._Wis = []
-            self._Wjs = []
-            self._Wfs = []
-            self._Wos = []
-            """
-
             self._Wks = []
             for group_id in xrange(self._number_of_groups):
                 #adding group matrix reponsible for input part and
@@ -198,24 +191,6 @@ class GLSTMCell(tf.contrib.rnn.RNNCell):
                 #we fuse i, j, f, o gates, hence 4*self._group_shape[1], we also fuse inpt and state, hence 2*self._group_shape[0]
                 self._Wks.append(_get_concat_variable("W_" + str(group_id), [2*self._group_shape[0], 4*self._group_shape[1]], dtype, self._num_proj_shards))
 
-                """
-                self._Wis.append(_get_concat_variable("G_And_GP_i_" + str(group_id), [2*self._group_shape[0], self._group_shape[1]], dtype, self._num_proj_shards))
-                self._Wjs.append(_get_concat_variable("G_And_GP_j_" + str(group_id), [2*self._group_shape[0], self._group_shape[1]], dtype, self._num_proj_shards))
-                self._Wfs.append(_get_concat_variable("G_And_GP_f_" + str(group_id), [2*self._group_shape[0], self._group_shape[1]], dtype, self._num_proj_shards))
-                self._Wos.append(_get_concat_variable("G_And_GP_0_" + str(group_id), [2*self._group_shape[0], self._group_shape[1]], dtype, self._num_proj_shards))
-                """
-
-                """
-                self._Wis.append([_get_concat_variable("G_i_" + str(group_id), self._group_shape, dtype, self._num_proj_shards),
-                                  _get_concat_variable("GP_i_" + str(group_id), self._group_shape, dtype, self._num_proj_shards)])
-                self._Wjs.append([_get_concat_variable("G_j_" + str(group_id), self._group_shape, dtype, self._num_proj_shards),
-                                  _get_concat_variable("GP_j_" + str(group_id), self._group_shape, dtype, self._num_proj_shards)])
-                self._Wfs.append([_get_concat_variable("G_f_" + str(group_id), self._group_shape, dtype, self._num_proj_shards),
-                                  _get_concat_variable("GP_f_" + str(group_id), self._group_shape, dtype, self._num_proj_shards)])
-                self._Wos.append([_get_concat_variable("G_o_" + str(group_id), self._group_shape, dtype, self._num_proj_shards),
-                                  _get_concat_variable("GP_o_" + str(group_id), self._group_shape, dtype, self._num_proj_shards)])
-                """
-            
             #biases for gates
             self._b_i = tf.get_variable(
                 "B_i", shape=[self._num_units])
@@ -230,8 +205,6 @@ class GLSTMCell(tf.contrib.rnn.RNNCell):
             self._concat_w_proj = _get_concat_variable(
                 "W_P", [self._num_units, self._num_proj],
                 dtype, self._num_proj_shards)
-            
-
 
     @property
     def state_size(self):
@@ -272,20 +245,6 @@ class GLSTMCell(tf.contrib.rnn.RNNCell):
                 f_parts.append(f_k)
                 o_parts.append(o_k)
 
-                """
-                i_parts.append(tf.matmul(x_g_id, self._Wis[group_id], axis=0)))
-                j_parts.append(tf.matmul(x_g_id, self._Wjs[group_id], axis=0)))
-                f_parts.append(tf.matmul(x_g_id, self._Wfs[group_id], axis=0)))
-                o_parts.append(tf.matmul(x_g_id, self._Wos[group_id], axis=0)))
-                """
-                
-                """
-                i_parts.append(tf.matmul(x_g_id, tf.concat([self._Wis[group_id][0], self._Wis[group_id][1]], axis=0)))
-                j_parts.append(tf.matmul(x_g_id, tf.concat([self._Wjs[group_id][0], self._Wjs[group_id][1]], axis=0)))
-                f_parts.append(tf.matmul(x_g_id, tf.concat([self._Wfs[group_id][0], self._Wfs[group_id][1]], axis=0)))
-                o_parts.append(tf.matmul(x_g_id, tf.concat([self._Wos[group_id][0], self._Wos[group_id][1]], axis=0)))
-                """
-            
             i = tf.nn.bias_add(tf.concat(i_parts, axis=1), self._b_i)
             j = tf.nn.bias_add(tf.concat(j_parts, axis=1), self._b_j)
             f = tf.nn.bias_add(tf.concat(f_parts, axis=1), self._b_f)
