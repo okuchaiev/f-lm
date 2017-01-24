@@ -29,7 +29,8 @@ def run_train(dataset, hps, logdir, ps_device, task=0, master=""):
                              summary_op=None,  # Automatic summaries don't work with placeholders.
                              global_step=model.global_step,
                              save_summaries_secs=120,
-                             save_model_secs=120*7)
+                             #save_model_secs=120*7)
+                             save_model_secs=124)
                              #save_summaries_secs=30,
                              #save_model_secs=120 * 5)
 
@@ -50,11 +51,12 @@ def run_train(dataset, hps, logdir, ps_device, task=0, master=""):
 
         local_step = 0
         prev_global_step = sess.run(model.global_step)
+        cur_global_step = 0
         prev_time = time.time()
         data_iterator = dataset.iterate_forever(hps.batch_size * hps.num_gpus, hps.num_steps)
         while not sv.should_stop() and (time.time() - stime) < hps.max_time:
             fetches = [model.global_step, model.loss, model.train_op]
-            # Chief worker computes summaries every 20 steps.
+            # Chief worker computes summaries every 100 steps.
             should_compute_summary = (task == 0  and local_step % 100 == 0)
             if should_compute_summary:
                 fetches += [model.summary_op]
@@ -78,6 +80,8 @@ def run_train(dataset, hps, logdir, ps_device, task=0, master=""):
             else:
                 #fetched = sess.run(fetches, {model.x: x, model.y: y, model.w: w})
                 fetched = sess.run(fetches, {model.x: x, model.y: y})
+            
+            cur_global_step = fetched[0]
 
             local_step += 1
             if should_compute_summary:
@@ -86,11 +90,13 @@ def run_train(dataset, hps, logdir, ps_device, task=0, master=""):
             if local_step < 10 or local_step % 20 == 0:
                 cur_time = time.time()
                 num_words = hps.batch_size * hps.num_gpus * hps.num_steps
-                wps = (fetched[0] - prev_global_step) * num_words / (cur_time - prev_time)
-                prev_global_step = fetched[0]
+                wps = (cur_global_step - prev_global_step) * num_words / (cur_time - prev_time)
+                prev_global_step = cur_global_step
                 print("Iteration %d, time = %.2fs, wps = %.0f, train loss = %.4f" % (
-                    fetched[0], cur_time - prev_time, wps, fetched[1]))
+                    cur_global_step, cur_time - prev_time, wps, fetched[1]))
                 prev_time = cur_time
+        #save last model
+        sv._saver.save(sess, sv.save_path, cur_global_step)
     sv.stop()
 
 
