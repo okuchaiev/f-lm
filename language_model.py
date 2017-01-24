@@ -44,6 +44,8 @@ class LM(object):
                 optimizer = tf.train.AdamOptimizer(hps.learning_rate)
             elif hps.optimizer == 3:
                 optimizer = tf.train.RMSPropOptimizer(learning_rate=hps.learning_rate)
+	    elif hps.optimizer == 4:
+		optimizer = tf.train.GradientDescentOptimizer(hps.learning_rate)
             else:
                 optimizer = tf.train.AdagradOptimizer(hps.learning_rate, initial_accumulator_value=1.0)
             self.train_op = optimizer.apply_gradients(grads, global_step=self.global_step)
@@ -140,7 +142,7 @@ class LM(object):
         softmax_vars = find_trainable_variables("softmax")
 
         all_vars = emb_vars + lstm_vars + softmax_vars
-        grads = tf.gradients(loss, all_vars)
+        grads = tf.gradients(loss, all_vars, aggregation_method=tf.AggregationMethod.EXPERIMENTAL_ACCUMULATE_N)
         orig_grads = grads[:]
         emb_grads = grads[:len(emb_vars)]
         grads = grads[len(emb_vars):]

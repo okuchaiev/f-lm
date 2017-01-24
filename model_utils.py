@@ -140,7 +140,7 @@ class FLSTMCell(tf.contrib.rnn.RNNCell):
                 else:
                     lstm_matrix = tf.nn.bias_add(tf.matmul(tf.matmul(cell_inputs, self._concat_w1), self._concat_w2), self._b)
             else:
-                lstm_matrix = tf.nn.bias_add(tf.matmul(cell_inputs, self._concat_w), self._b)
+                lstm_matrix = tf.matmul(cell_inputs, self._concat_w) + self._b
 
             i, j, f, o = tf.split(lstm_matrix, 4, 1)
 

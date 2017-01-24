@@ -29,8 +29,7 @@ def run_train(dataset, hps, logdir, ps_device, task=0, master=""):
                              summary_op=None,  # Automatic summaries don't work with placeholders.
                              global_step=model.global_step,
                              save_summaries_secs=120,
-                             #save_model_secs=120*7)
-                             save_model_secs=124)
+                             save_model_secs=120*7)
                              #save_summaries_secs=30,
                              #save_model_secs=120 * 5)
 
@@ -40,14 +39,15 @@ def run_train(dataset, hps, logdir, ps_device, task=0, master=""):
     config = tf.ConfigProto(allow_soft_placement=True)
     with sv.managed_session(master, config=config) as sess:
         # Slowly increase the number of workers during beginning of the training.
-        while not sv.should_stop() and (time.time() - stime) < hps.max_time:
-            step = int(sess.run(model.global_step))
-            waiting_until_step = task * hps.num_delayed_steps
-            if step >= waiting_until_step:
-                break
-            else:
-                print("Current step is %d. Waiting until: %d" % (step, waiting_until_step))
-            time.sleep(20.0)
+        #while not sv.should_stop() and (time.time() - stime) < hps.max_time:
+        #    step = int(sess.run(model.global_step))
+        #    waiting_until_step = task * hps.num_delayed_steps
+        #    if step >= waiting_until_step:
+        #        break
+        #    else:
+        #        print("Current step is %d. Waiting until: %d" % (step, waiting_until_step))
+        #    time.sleep(20.0)
+	
 
         local_step = 0
         prev_global_step = sess.run(model.global_step)
