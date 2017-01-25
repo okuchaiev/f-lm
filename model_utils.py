@@ -66,7 +66,7 @@ def _get_concat_variable(name, shape, dtype, num_shards):
     if len(_sharded_variable) == 1:
         return _sharded_variable[0]
 
-    return tf.concat(0, _sharded_variable)
+    return tf.concat(_sharded_variable, 0)
 
 
 class FLSTMCell(tf.contrib.rnn.RNNCell):
@@ -79,7 +79,7 @@ class FLSTMCell(tf.contrib.rnn.RNNCell):
         self._num_unit_shards = num_shards
         self._num_proj_shards = num_shards
         self._forget_bias = 1.0
-        self._factor_size = factor_size
+        self._factor_size = int(factor_size)
         self._fnon_linearity = fnon_linearity
 
         if num_proj:
@@ -96,8 +96,8 @@ class FLSTMCell(tf.contrib.rnn.RNNCell):
                     dtype, self._num_unit_shards)
                 self._concat_w2 = _get_concat_variable(
                     "W2", [self._factor_size, 4 * self._num_units],
-                    dtype, self._num_unit_shards)
-                if self._fnon_linearity:
+                    dtype, self._num_unit_shards)                
+		if self._fnon_linearity:
                     self._b1 = tf.get_variable(name="b1", shape = [self._factor_size])
             else:
                 self._concat_w = _get_concat_variable(
