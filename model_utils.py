@@ -79,7 +79,10 @@ class FLSTMCell(tf.contrib.rnn.RNNCell):
         self._num_unit_shards = num_shards
         self._num_proj_shards = num_shards
         self._forget_bias = 1.0
-        self._factor_size = int(factor_size)
+        if factor_size:
+            self._factor_size = int(factor_size)
+        else:
+            self._factor_size = None
         self._fnon_linearity = fnon_linearity
 
         if num_proj:
