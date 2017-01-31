@@ -45,10 +45,9 @@ class LM(object):
                 optimizer = tf.train.AdamOptimizer(hps.learning_rate)
             elif hps.optimizer == 3:
                 optimizer = tf.train.RMSPropOptimizer(learning_rate=hps.learning_rate)
-	    elif hps.optimizer == 4:
-		optimizer = tf.train.GradientDescentOptimizer(hps.learning_rate)
             else:
                 optimizer = tf.train.AdagradOptimizer(hps.learning_rate, initial_accumulator_value=1.0)
+            
             self.train_op = optimizer.apply_gradients(grads, global_step=self.global_step)
             self.summary_op = tf.summary.merge_all()
         else:
