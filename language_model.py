@@ -3,7 +3,8 @@ import tensorflow as tf
 from model_utils import sharded_variable, getdtype, variable_summaries
 from common import assign_to_gpu, average_grads, find_trainable_variables
 from hparams import HParams
-from model_utils import GLSTMCell, FLSTMCell
+from model_utils import GLSTMCell, DLSTMCell
+
 
 
 class LM(object):
@@ -61,57 +62,47 @@ class LM(object):
                 self.train_op = tf.group(*[self.train_op, ema.apply(variables_to_average)])
                 self.avg_dict = ema.variables_to_restore(variables_to_average)
 
-    #def _forward(self, gpu, x, y, w):
+    
     def _forward(self, gpu, x, y):
         hps = self.hps
-        #w = tf.to_float(w)
-        self.initial_states = []
-        for i in range(hps.num_layers):
-            with tf.device("/gpu:%d" % gpu):
-                state = tf.Variable(tf.zeros([hps.batch_size, hps.state_size + hps.projected_size],
-                                             dtype=getdtype(hps, True)),
-                                    trainable=False, collections=[tf.GraphKeys.LOCAL_VARIABLES],
-                                    name="state_%d_%d" % (gpu, i), dtype=getdtype(hps, True))
-                self.initial_states += [state]
-
+        with tf.device("/gpu:%d" % gpu):
+            def lstm_cell(hps):
+                if hps.dlayers is not None:
+                    print("Using DLSTM cells")
+                    print("Do layer norm: " + str(hps.do_layer_norm))
+                    return DLSTMCell(num_units=hps.state_size, num_proj=hps.projected_size, hlayers=hps.dlayers.split("_"), do_layer_norm=hps.do_layer_norm)
+                if hps.num_of_groups>0:
+                    print('Doing %d groups' % hps.num_of_groups)
+                    return GLSTMCell(num_units=hps.state_size, num_proj=hps.projected_size, number_of_groups=hps.num_of_groups)
+                else:
+                    print('Not doing groups')
+                    return tf.contrib.rnn.LSTMCell(hps.state_size, num_proj=hps.projected_size)
+            attn_cell = lstm_cell
+            if hps.keep_prob < 1:
+                def attn_cell():
+                    return tf.contrib.rnn.DropoutWrapper(lstm_cell(hps), output_keep_prob=hps.keep_prob)
+            cell = tf.contrib.rnn.MultiRNNCell(
+                [attn_cell() for _ in range(hps.num_layers)], state_is_tuple=True)
+            self._initial_state = cell.zero_state(hps.batch_size, getdtype(hps, True))
+            print(self._initial_state)
+        
         emb_vars = sharded_variable("emb", [hps.vocab_size, hps.emb_size],
                                     hps.num_shards, dtype=getdtype(hps, False))
-
         x = tf.nn.embedding_lookup(emb_vars, x)  # [bs, steps, emb_size]
         if hps.keep_prob < 1.0:
             x = tf.nn.dropout(x, hps.keep_prob)
 
-        #inputs =  [tf.squeeze(tf.cast(v, getdtype(hps, True)), [1]) for v in tf.split(1, hps.num_steps, x)]
-        inputs =  [tf.squeeze(tf.cast(v, getdtype(hps, True)), [1]) for v in tf.split(x, hps.num_steps, 1)]
-
-        for i in range(hps.num_layers):
-            with tf.variable_scope("lstm_%d" % i):
-                if hps.num_of_groups > 0:
-                    print("Using %d groups" % hps.num_of_groups)                    
-                    cell = GLSTMCell(hps.state_size, hps.emb_size, num_proj=hps.projected_size, number_of_groups=hps.num_of_groups, dtype=getdtype(hps, True))
-                else:
-                    print("Not using groups")
-                    if hps.fnon_linearity=="sigmoid":
-                        print('Using sigmoid fnonlinearity')
-                        cell = FLSTMCell(hps.state_size, hps.emb_size, num_proj=hps.projected_size, factor_size=hps.fact_size, fnon_linearity=tf.sigmoid, dtype=getdtype(hps, True))
-                    elif hps.fnon_linearity=="relu":
-                        print('Using relu fnonlinearity')
-                        cell = FLSTMCell(hps.state_size, hps.emb_size, num_proj=hps.projected_size, factor_size=hps.fact_size, fnon_linearity=tf.nn.relu, dtype=getdtype(hps, True))
-                    else:
-                        print('Not using fnonlinearities')
-                        cell = FLSTMCell(hps.state_size, hps.emb_size, num_proj=hps.projected_size, factor_size=hps.fact_size, dtype=getdtype(hps, True))
-
-            state = self.initial_states[i]
-            for t in range(hps.num_steps):
-                inputs[t], state = cell(inputs[t], state)
-                if hps.keep_prob < 1.0:
-                    inputs[t] = tf.nn.dropout(inputs[t], hps.keep_prob)
-
-            with tf.control_dependencies([self.initial_states[i].assign(state)]):
-                inputs[t] = tf.identity(inputs[t])
-
-        #inputs = tf.reshape(tf.concat(1, inputs), [-1, hps.projected_size])
-        inputs = tf.reshape(tf.concat(inputs, 1), [-1, hps.projected_size])
+        outputs = []
+        state = self._initial_state
+        #with tf.variable_scope("LSTM"):
+        #    for time_step in range(hps.num_steps):
+        #        if time_step > 0: tf.get_variable_scope().reuse_variables()
+        #        (cell_output, state) = cell(x[:, time_step, :], state)
+        #        outputs.append(cell_output)
+        inputs =  tf.unstack(x, num=hps.num_steps, axis=1)
+        outputs, state = tf.contrib.rnn.static_rnn(cell, inputs, initial_state=state, sequence_length=[hps.num_steps]*hps.batch_size)
+        
+        output = tf.reshape(tf.concat(outputs, 1), [-1, hps.projected_size])
 
         # Initialization ignores the fact that softmax_w is transposed. Twhat worked slightly better.
         softmax_w = sharded_variable("softmax_w", [hps.vocab_size, hps.projected_size], hps.num_shards)
@@ -121,12 +112,12 @@ class LM(object):
             full_softmax_w = tf.reshape(tf.concat(softmax_w, 1), [-1, hps.projected_size])
             full_softmax_w = full_softmax_w[:hps.vocab_size, :]
 
-            logits = tf.matmul(tf.to_float(inputs), full_softmax_w, transpose_b=True) + softmax_b
+            logits = tf.matmul(output, full_softmax_w, transpose_b=True) + softmax_b
             targets = tf.reshape(y, [-1])
             loss = tf.nn.sparse_softmax_cross_entropy_with_logits(logits=logits, labels=targets)
         else:
             targets = tf.reshape(y, [-1, 1])
-            loss = tf.nn.sampled_softmax_loss(softmax_w, softmax_b, targets, tf.to_float(inputs),
+            loss = tf.nn.sampled_softmax_loss(softmax_w, softmax_b, targets, output,
                                                hps.num_sampled, hps.vocab_size)
         #loss = tf.reduce_mean(loss * tf.reshape(w, [-1]))
         loss = tf.reduce_mean(loss)
@@ -139,6 +130,10 @@ class LM(object):
 
         emb_vars = find_trainable_variables("emb")
         lstm_vars = find_trainable_variables("LSTM")
+        print("LSTM vars to be optimized: ")
+        for v in lstm_vars:
+            print(v.name)
+        print("End")
         softmax_vars = find_trainable_variables("softmax")
 
         all_vars = emb_vars + lstm_vars + softmax_vars
@@ -208,10 +203,10 @@ class LM(object):
             float16_non_rnn=False,
             average_params=True,
             run_profiler=False,
-            do_summaries=False,
+            do_summaries=False,            
             max_time=180,
 
-            fact_size=None,
-            fnon_linearity="none",
+            dlayers=None,
+            do_layer_norm=False,
             num_of_groups=0,
 )
