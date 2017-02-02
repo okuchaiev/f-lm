@@ -78,10 +78,10 @@ class LM(object):
                     return tf.contrib.rnn.LSTMCell(hps.state_size, num_proj=hps.projected_size)
             attn_cell = lstm_cell
             if hps.keep_prob < 1:
-                def attn_cell():
+                def attn_cell(hps):
                     return tf.contrib.rnn.DropoutWrapper(lstm_cell(hps), output_keep_prob=hps.keep_prob)
             cell = tf.contrib.rnn.MultiRNNCell(
-                [attn_cell() for _ in range(hps.num_layers)], state_is_tuple=True)
+                [attn_cell(hps) for _ in range(hps.num_layers)], state_is_tuple=True)
             self._initial_state = cell.zero_state(hps.batch_size, getdtype(hps, True))
             print(self._initial_state)
         
@@ -99,7 +99,8 @@ class LM(object):
         #        (cell_output, state) = cell(x[:, time_step, :], state)
         #        outputs.append(cell_output)
         inputs =  tf.unstack(x, num=hps.num_steps, axis=1)
-        outputs, state = tf.contrib.rnn.static_rnn(cell, inputs, initial_state=state, sequence_length=[hps.num_steps]*hps.batch_size)
+        with tf.variable_scope("LSTM"):
+            outputs, state = tf.contrib.rnn.static_rnn(cell, inputs, initial_state=state, sequence_length=[hps.num_steps]*hps.batch_size)
         
         output = tf.reshape(tf.concat(outputs, 1), [-1, hps.projected_size])
 
