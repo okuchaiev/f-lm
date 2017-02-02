@@ -26,7 +26,7 @@ class LM(object):
             with tf.device(assign_to_gpu(i, ps_device)), tf.variable_scope(tf.get_variable_scope(),
                                                                            reuse=True if i > 0 else None):
                 #loss = self._forward(i, xs[i], ys[i], ws[i])
-                loss = self._forward(i, xs[i], ys[i])
+                loss, _ = self._forward(i, xs[i], ys[i])
                 losses += [loss]
                 if mode == "train":
                     cur_grads = self._backward(loss,  summaries=((i == hps.num_gpus - 1) and hps.do_summaries))
@@ -101,27 +101,28 @@ class LM(object):
         #inputs =  tf.unstack(x, num=hps.num_steps, axis=1)
         #with tf.variable_scope("LSTM"):
         #    outputs, state = tf.contrib.rnn.static_rnn(cell, inputs, initial_state=state, sequence_length=[hps.num_steps]*hps.batch_size)
-        
+
         output = tf.reshape(tf.concat(outputs, 1), [-1, hps.projected_size])
 
         # Initialization ignores the fact that softmax_w is transposed. Twhat worked slightly better.
         softmax_w = sharded_variable("softmax_w", [hps.vocab_size, hps.projected_size], hps.num_shards)
         softmax_b = tf.get_variable("softmax_b", [hps.vocab_size])
 
+        self._logits = None
         if hps.num_sampled == 0:
             full_softmax_w = tf.reshape(tf.concat(softmax_w, 1), [-1, hps.projected_size])
             full_softmax_w = full_softmax_w[:hps.vocab_size, :]
 
-            logits = tf.matmul(output, full_softmax_w, transpose_b=True) + softmax_b
+            self._logits = tf.matmul(output, full_softmax_w, transpose_b=True) + softmax_b
             targets = tf.reshape(y, [-1])
-            loss = tf.nn.sparse_softmax_cross_entropy_with_logits(logits=logits, labels=targets)
+            loss = tf.nn.sparse_softmax_cross_entropy_with_logits(logits=self._logits, labels=targets)
         else:
             targets = tf.reshape(y, [-1, 1])
             loss = tf.nn.sampled_softmax_loss(softmax_w, softmax_b, targets, output,
                                                hps.num_sampled, hps.vocab_size)
         #loss = tf.reduce_mean(loss * tf.reshape(w, [-1]))
         loss = tf.reduce_mean(loss)
-        return loss
+        return loss, self._logits
 
     def _backward(self, loss, summaries=False):
         hps = self.hps
