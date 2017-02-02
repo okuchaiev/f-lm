@@ -4,6 +4,7 @@ import numpy as np
 import tensorflow as tf
 
 
+
 def assign_to_gpu(gpu=0, ps_dev="/device:CPU:0"):
     def _assign(op):
         node_def = op if isinstance(op, tf.NodeDef) else op.node_def
@@ -57,19 +58,18 @@ class CheckpointLoader(object):
 
 
 def average_grads(tower_grads):
-    def average_dense(grad_and_vars):
+    def average_dense(grad_and_vars):        
         if len(grad_and_vars) == 1:
             return grad_and_vars[0][0]
 
         grad = grad_and_vars[0][0]
         for g, _ in grad_and_vars[1:]:
-            grad += g
+            grad += g        
         return grad / len(grad_and_vars)
 
     def average_sparse(grad_and_vars):
         if len(grad_and_vars) == 1:
-            return grad_and_vars[0][0]
-
+            return grad_and_vars[0][0]            
         indices = []
         values = []
         for g, _ in grad_and_vars:
@@ -78,7 +78,10 @@ def average_grads(tower_grads):
         indices = tf.concat(indices, 0)
         values = tf.concat(values, 0)
         return tf.IndexedSlices(values, indices, grad_and_vars[0][0].dense_shape)
-
+    
+    print("^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^")
+    print(tower_grads)
+    print("^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^")
     average_grads = []
     for grad_and_vars in zip(*tower_grads):
         if grad_and_vars[0][0] is None:

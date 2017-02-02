@@ -93,14 +93,14 @@ class LM(object):
 
         outputs = []
         state = self._initial_state
-        #with tf.variable_scope("LSTM"):
-        #    for time_step in range(hps.num_steps):
-        #        if time_step > 0: tf.get_variable_scope().reuse_variables()
-        #        (cell_output, state) = cell(x[:, time_step, :], state)
-        #        outputs.append(cell_output)
-        inputs =  tf.unstack(x, num=hps.num_steps, axis=1)
         with tf.variable_scope("LSTM"):
-            outputs, state = tf.contrib.rnn.static_rnn(cell, inputs, initial_state=state, sequence_length=[hps.num_steps]*hps.batch_size)
+            for time_step in range(hps.num_steps):
+                if time_step > 0: tf.get_variable_scope().reuse_variables()
+                (cell_output, state) = cell(x[:, time_step, :], state)
+                outputs.append(cell_output)
+        #inputs =  tf.unstack(x, num=hps.num_steps, axis=1)
+        #with tf.variable_scope("LSTM"):
+        #    outputs, state = tf.contrib.rnn.static_rnn(cell, inputs, initial_state=state, sequence_length=[hps.num_steps]*hps.batch_size)
         
         output = tf.reshape(tf.concat(outputs, 1), [-1, hps.projected_size])
 
@@ -137,7 +137,8 @@ class LM(object):
         softmax_vars = find_trainable_variables("softmax")
 
         all_vars = emb_vars + lstm_vars + softmax_vars
-        grads = tf.gradients(loss, all_vars, aggregation_method=tf.AggregationMethod.EXPERIMENTAL_ACCUMULATE_N)
+        #grads = tf.gradients(loss, all_vars, aggregation_method=tf.AggregationMethod.EXPERIMENTAL_ACCUMULATE_N)
+        grads = tf.gradients(loss, all_vars, aggregation_method=tf.AggregationMethod.EXPERIMENTAL_TREE)
         orig_grads = grads[:]
         emb_grads = grads[:len(emb_vars)]
         grads = grads[len(emb_vars):]
