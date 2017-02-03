@@ -3,6 +3,10 @@ import tensorflow as tf
 import random
 from tensorflow import tanh, sigmoid, identity
 from tensorflow.python.ops import variable_scope as vs
+from tensorflow.python.util import nest
+from tensorflow.python.ops import math_ops
+from tensorflow.python.ops import nn_ops
+from tensorflow.python.ops import array_ops
 
 def variable_summaries(var, groupname, name):
     """Attach a lot of summaries to a Tensor.
@@ -66,6 +70,62 @@ def _get_concat_variable(name, shape, dtype, num_shards):
 
     return tf.concat(_sharded_variable, 0)
 
+#taken from tensorflow/contrib/rnn/python/ops/core_rnn_cell_impl.py
+def _linear(args, output_size, bias, bias_start=0.0):
+  """Linear map: sum_i(args[i] * W[i]), where W[i] is a variable.
+
+  Args:
+    args: a 2D Tensor or a list of 2D, batch x n, Tensors.
+    output_size: int, second dimension of W[i].
+    bias: boolean, whether to add a bias term or not.
+    bias_start: starting value to initialize the bias; 0 by default.
+
+  Returns:
+    A 2D Tensor with shape [batch x output_size] equal to
+    sum_i(args[i] * W[i]), where W[i]s are newly created matrices.
+
+  Raises:
+    ValueError: if some of the arguments has unspecified or wrong shape.
+  """
+  if args is None or (nest.is_sequence(args) and not args):
+    raise ValueError("`args` must be specified")
+  if not nest.is_sequence(args):
+    args = [args]
+
+  # Calculate the total size of arguments on dimension 1.
+  total_arg_size = 0
+  shapes = [a.get_shape() for a in args]
+  for shape in shapes:
+    if shape.ndims != 2:
+      raise ValueError("linear is expecting 2D arguments: %s" % shapes)
+    if shape[1].value is None:
+      raise ValueError("linear expects shape[1] to be provided for shape %s, "
+                       "but saw %s" % (shape, shape[1]))
+    else:
+      total_arg_size += shape[1].value
+
+  dtype = [a.dtype for a in args][0]
+
+  # Now the computation.
+  scope = vs.get_variable_scope()
+  with vs.variable_scope(scope) as outer_scope:
+    weights = vs.get_variable(
+        "weights", [total_arg_size, output_size], dtype=dtype)
+    if len(args) == 1:
+      res = math_ops.matmul(args[0], weights)
+    else:
+      res = math_ops.matmul(array_ops.concat(args, 1), weights)
+    if not bias:
+      return res
+    with vs.variable_scope(outer_scope) as inner_scope:
+      inner_scope.set_partitioner(None)
+      biases = vs.get_variable(
+          "biases", [output_size],
+          dtype=dtype,
+          initializer=init_ops.constant_initializer(bias_start, dtype=dtype))
+    return nn_ops.bias_add(res, biases)
+
+
 
 class GLSTMCell(tf.contrib.rnn.RNNCell):
     """LSTM cell with groups"""
@@ -122,7 +182,7 @@ class GLSTMCell(tf.contrib.rnn.RNNCell):
 
             for group_id in xrange(self._number_of_groups):
                 with vs.variable_scope("G_%d" % group_id) as g_scope:                
-                    R_k = tf.contrib.rnn.core_rnn_cell_impl._linear([inputs_g[group_id], m_prev_g[group_id]], 4*self._group_shape[1], bias=False, scope=g_scope)
+                    R_k = _linear([inputs_g[group_id], m_prev_g[group_id]], 4*self._group_shape[1], bias=False)
                     i_k, j_k, f_k, o_k = tf.split(R_k, 4, 1)
                     i_parts.append(i_k)
                     j_parts.append(j_k)
@@ -149,7 +209,7 @@ class GLSTMCell(tf.contrib.rnn.RNNCell):
             
             if self._num_proj is not None:
                 with vs.variable_scope("projection") as proj_scope:
-                    m = tf.contrib.rnn.core_rnn_cell_impl._linear(m, self._num_proj, bias=False, scope=proj_scope)
+                    m = _linear(m, self._num_proj, bias=False)
 
             new_state = (tf.contrib.rnn.LSTMStateTuple(c, m))
             return m, new_state
@@ -226,7 +286,7 @@ class DLSTMCell(tf.contrib.rnn.RNNCell):
             
             if self._num_proj is not None:
                 with vs.variable_scope("projection") as proj_scope:
-                    m = tf.contrib.rnn.core_rnn_cell_impl._linear(m, self._num_proj, bias=False, scope=proj_scope)
+                    m = _linear(m, self._num_proj, bias=False)
 
             new_state = (tf.contrib.rnn.LSTMStateTuple(c, m))
             return m, new_state

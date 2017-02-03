@@ -78,10 +78,7 @@ def average_grads(tower_grads):
         indices = tf.concat(indices, 0)
         values = tf.concat(values, 0)
         return tf.IndexedSlices(values, indices, grad_and_vars[0][0].dense_shape)
-    
-    print("^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^")
-    print(tower_grads)
-    print("^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^")
+
     average_grads = []
     for grad_and_vars in zip(*tower_grads):
         if grad_and_vars[0][0] is None:

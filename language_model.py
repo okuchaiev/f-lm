@@ -83,7 +83,7 @@ class LM(object):
             cell = tf.contrib.rnn.MultiRNNCell(
                 [attn_cell(hps) for _ in range(hps.num_layers)], state_is_tuple=True)
             self._initial_state = cell.zero_state(hps.batch_size, getdtype(hps, True))
-            print(self._initial_state)
+            #print(self._initial_state)
         
         emb_vars = sharded_variable("emb", [hps.vocab_size, hps.emb_size],
                                     hps.num_shards, dtype=getdtype(hps, False))
