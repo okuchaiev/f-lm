@@ -57,7 +57,7 @@ class LM(object):
             with tf.name_scope(None):  # This is needed due to EMA implementation silliness.
                 # Keep track of moving average of LSTM variables.
                 ema = tf.train.ExponentialMovingAverage(decay=0.999)
-                variables_to_average = [tf.cast(x, dtype=getdtype(hps, is_rnn=False)) for x in find_trainable_variables("LSTM")]
+                variables_to_average = find_trainable_variables("LSTM")
                 self.train_op = tf.group(*[self.train_op, ema.apply(variables_to_average)])
                 self.avg_dict = ema.variables_to_restore(variables_to_average)
 
