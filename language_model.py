@@ -57,7 +57,7 @@ class LM(object):
             with tf.name_scope(None):  # This is needed due to EMA implementation silliness.
                 # Keep track of moving average of LSTM variables.
                 ema = tf.train.ExponentialMovingAverage(decay=0.999)
-                variables_to_average = find_trainable_variables("LSTM")
+                variables_to_average = [tf.cast(x, dtype=getdtype(hps, is_rnn=False)) for x in find_trainable_variables("LSTM")]
                 self.train_op = tf.group(*[self.train_op, ema.apply(variables_to_average)])
                 self.avg_dict = ema.variables_to_restore(variables_to_average)
 
@@ -96,13 +96,13 @@ class LM(object):
         with tf.variable_scope("LSTM"):
             for time_step in range(hps.num_steps):
                 if time_step > 0: tf.get_variable_scope().reuse_variables()
-                (cell_output, state) = cell(x[:, time_step, :], state)
+                (cell_output, state) = cell(tf.cast(x[:, time_step, :], dtype=getdtype(hps, is_rnn=True)), state)
                 outputs.append(cell_output)
         #inputs =  tf.unstack(x, num=hps.num_steps, axis=1)
         #with tf.variable_scope("LSTM"):
         #    outputs, state = tf.contrib.rnn.static_rnn(cell, inputs, initial_state=state, sequence_length=[hps.num_steps]*hps.batch_size)
 
-        output = tf.reshape(tf.concat(outputs, 1), [-1, hps.projected_size])
+        output = tf.cast(tf.reshape(tf.concat(outputs, 1), [-1, hps.projected_size]), dtype=getdtype(hps, is_rnn=False))
 
         # Initialization ignores the fact that softmax_w is transposed. Twhat worked slightly better.
         softmax_w = sharded_variable("softmax_w", [hps.vocab_size, hps.projected_size], hps.num_shards)
