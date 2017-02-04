@@ -191,13 +191,13 @@ class GLSTMCell(tf.contrib.rnn.RNNCell):
             
             #biases for gates
             self._b_i = tf.get_variable(
-                "B_i", shape=[self._num_units])
+                "B_i", shape=[self._num_units], dtype=dtype)
             self._b_j = tf.get_variable(
-                "B_j", shape=[self._num_units])
+                "B_j", shape=[self._num_units], dtype=dtype)
             self._b_f = tf.get_variable(
-                "B_f", shape=[self._num_units])
+                "B_f", shape=[self._num_units], dtype=dtype)
             self._b_o = tf.get_variable(
-                "B_o", shape=[self._num_units])
+                "B_o", shape=[self._num_units], dtype=dtype)
 
             i = tf.concat(i_parts, axis=1) + self._b_i
             j = tf.concat(j_parts, axis=1) + self._b_j
