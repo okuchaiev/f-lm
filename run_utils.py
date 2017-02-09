@@ -121,7 +121,7 @@ def run_eval(dataset, hps, logdir, mode, num_eval_steps):
     sess = tf.Session(config=config)
     sw = tf.summary.FileWriter(logdir + "/" + mode, sess.graph)
     ckpt_loader = CheckpointLoader(saver, model.global_step, logdir + "/train")
-    
+
     with sess.as_default():
         while ckpt_loader.load_checkpoint():
             global_step = ckpt_loader.last_global_step
@@ -134,20 +134,15 @@ def run_eval(dataset, hps, logdir, mode, num_eval_steps):
             for i, (x, y) in enumerate(data_iterator):
                 if i >= num_eval_steps and mode!="eval_full":
                     break
-                prev_time = time.time()    
+
                 #loss = sess.run(model.loss, {model.x: x, model.y: y, model.w: w})
                 loss = sess.run(model.loss, {model.x: x, model.y: y})
                 loss_nom += loss
                 loss_den += 1 # ???
                 #loss_den += w.mean()
-                num_words = hps.batch_size * hps.num_gpus * hps.num_steps
-                cur_time = time.time()              
-                wps = num_words / (cur_time - prev_time)
-                prev_time = cur_time
                 loss = loss_nom / loss_den
-                sys.stdout.write("%d: %.3f (%.3f) WPS = %.0f ... " % (i, loss, np.exp(loss), wps))
+                sys.stdout.write("%d: %.3f (%.3f) ... " % (i, loss, np.exp(loss)))
                 sys.stdout.flush()
-                
             sys.stdout.write("\n")
 
             log_perplexity = loss_nom / loss_den
