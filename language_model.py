@@ -84,11 +84,22 @@ class LM(object):
         #inputs =  [tf.squeeze(tf.cast(v, getdtype(hps, True)), [1]) for v in tf.split(1, hps.num_steps, x)]
         inputs =  [tf.squeeze(tf.cast(v, getdtype(hps, True)), [1]) for v in tf.split(x, hps.num_steps, 1)]
 
+        if hps.num_of_groups:
+            print(hps.num_of_groups)
+            groups_h = [int(group_size) for group_size in hps.num_of_groups.split("_")]
+            if len(groups_h) != hps.num_layers:
+                assert(len(groups_h)==1)
+                groups_h = groups_h*hps.num_layers
+            print("Group Hierarchy: " + str(groups_h))
+        else:
+            groups_h = [0]*hps.num_layers
+        
         for i in range(hps.num_layers):
             with tf.variable_scope("lstm_%d" % i):
-                if hps.num_of_groups > 0:
-                    print("Using %d groups" % hps.num_of_groups)                    
-                    cell = GLSTMCell(hps.state_size, hps.emb_size, num_proj=hps.projected_size, number_of_groups=hps.num_of_groups, dtype=getdtype(hps, True))
+                num_of_groups = groups_h[i]
+                if num_of_groups > 0:
+                    print("Using %d groups" % num_of_groups)                    
+                    cell = GLSTMCell(hps.state_size, hps.emb_size, num_proj=hps.projected_size, number_of_groups=num_of_groups, dtype=getdtype(hps, True))
                 else:
                     print("Not using groups")
                     if hps.fnon_linearity=="sigmoid":
@@ -213,5 +224,5 @@ class LM(object):
 
             fact_size=None,
             fnon_linearity="none",
-            num_of_groups=0,
+            num_of_groups=None,
 )
