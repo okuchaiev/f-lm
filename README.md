@@ -6,21 +6,21 @@ The code supports running on the machine with multiple GPUs using synchronized g
 
 # Main modification from the forked code
 
-* Research experimental GLSTM and DLSTM cells
-* Refactor code to make fuller use of TF RNN APIs
+* Research experimental G-LSTM and F-LSTM cells from https://openreview.net/pdf?id=ByxWXyNFg The exact commit used to perform the experiments from this paper is: d98fb110053c187354caf68ff56f5a8535926b5d
 * More fine grained summary tracking 
 * full eval mode
 * Updated to work with Tensorflow master branch (as of Jan 30, 2016)
 
 
 # Performance
+Note, not using XLA optimization for now. To be tested soon.
 ## Current Code:
 (In all experiments minibatch of 128 per GPU is used)
 SMALLLSTM model on 1xP100 is getting about ~33K wps and achieves full eval set perplexity of 41.413 after 24hours
 BIGLSTM model on 1xP100 is getting about ~4.5K wps
 
-BIGLSTM model 1 DGX-1, all 8 GPUs is getting ~20.3K wps (current code is likely to do a little better)
-
+BIGLSTM model 1 DGX-1, all 8 GPUs is getting ~20.3K wps 
+BIG G-LSTM G-4 (model with 4 groups) model 1 DGX-1, all 8 GPUs is getting ~ 41.4K wps
 
 ## Original code:
 The code was tested on a box with 8 Geforce Titan X and LSTM-2048-512 (default configuration) can process up to 100k words per second.
@@ -63,11 +63,11 @@ The command accepts and additional argument `--hpconfig` which allows to overrid
 * state_size=2048 - LSTM state size
 * projected_size=512 - LSTM projection size 
 * num_sampled=8192 - number of word target samples for IS objective during training
-* num_of_groups - if not 0, will use GLSTM cell with num_of_groups groups. dlayers must be None then.
-* fact_size - if not None, FLSTM cell will be used with factorization size of fact size
+* num_of_groups - if not 0, will use G-LSTM cell with num_of_groups groups. 
+* fact_size - if not None, F-LSTM cell will be used with factorization size of fact size
 * fnon_linearity="none", experimental for now, use default
 
 
 ## Feedback
 Forked code and GLSTM/FLSTM cells: okuchaiev@nvidia.com
-Original code/pape: rafjoz@gmail.com
+Original code/paper: rafjoz@gmail.com
