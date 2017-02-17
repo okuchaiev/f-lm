@@ -98,8 +98,11 @@ class LM(object):
             with tf.variable_scope("lstm_%d" % i):
                 num_of_groups = groups_h[i]
                 if num_of_groups > 0:
-                    print("Using %d groups" % num_of_groups)                    
+                    print("Using %d groups" % num_of_groups)
                     cell = GLSTMCell(hps.state_size, hps.emb_size, num_proj=hps.projected_size, number_of_groups=num_of_groups, dtype=getdtype(hps, True))
+                    if hps.use_skip_connections:
+                        print('Adding skip connections')
+                        cell = tf.contrib.rnn.ResidualWrapper(cell)
                 else:
                     print("Not using groups")
                     if hps.fnon_linearity=="sigmoid":
@@ -225,4 +228,5 @@ class LM(object):
             fact_size=None,
             fnon_linearity="none",
             num_of_groups=None,
+            use_skip_connections=True
 )
