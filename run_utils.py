@@ -28,8 +28,8 @@ def run_train(dataset, hps, logdir, ps_device, task=0, master=""):
                              logdir=logdir,
                              summary_op=None,  # Automatic summaries don't work with placeholders.
                              global_step=model.global_step,
-                             save_summaries_secs=120,
-                             save_model_secs=120*7)
+                             save_summaries_secs=60*hps.save_summary_every_min,
+                             save_model_secs=60*hps.save_model_every_min)
                              #save_summaries_secs=30,
                              #save_model_secs=120 * 5)
 

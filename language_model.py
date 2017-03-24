@@ -3,7 +3,8 @@ import tensorflow as tf
 from model_utils import sharded_variable, getdtype, variable_summaries
 from common import assign_to_gpu, average_grads, find_trainable_variables
 from hparams import HParams
-from model_utils import GLSTMCell, FLSTMCell
+from tensorflow.contrib.rnn import LSTMCell
+from factorized_lstm_cells import GLSTMCell
 
 
 class LM(object):
@@ -44,8 +45,8 @@ class LM(object):
                 optimizer = tf.train.AdamOptimizer(hps.learning_rate)
             elif hps.optimizer == 3:
                 optimizer = tf.train.RMSPropOptimizer(learning_rate=hps.learning_rate)
-	    elif hps.optimizer == 4:
-		optimizer = tf.train.GradientDescentOptimizer(hps.learning_rate)
+            elif hps.optimizer == 4:
+                optimizer = tf.train.GradientDescentOptimizer(hps.learning_rate)
             else:
                 optimizer = tf.train.AdagradOptimizer(hps.learning_rate, initial_accumulator_value=1.0)
             self.train_op = optimizer.apply_gradients(grads, global_step=self.global_step)
@@ -65,15 +66,6 @@ class LM(object):
     def _forward(self, gpu, x, y):
         hps = self.hps
         #w = tf.to_float(w)
-        self.initial_states = []
-        for i in range(hps.num_layers):
-            with tf.device("/gpu:%d" % gpu):
-                state = tf.Variable(tf.zeros([hps.batch_size, hps.state_size + hps.projected_size],
-                                             dtype=getdtype(hps, True)),
-                                    trainable=False, collections=[tf.GraphKeys.LOCAL_VARIABLES],
-                                    name="state_%d_%d" % (gpu, i), dtype=getdtype(hps, True))
-                self.initial_states += [state]
-
         emb_vars = sharded_variable("emb", [hps.vocab_size, hps.emb_size],
                                     hps.num_shards, dtype=getdtype(hps, False))
 
@@ -82,35 +74,24 @@ class LM(object):
             x = tf.nn.dropout(x, hps.keep_prob)
 
         #inputs =  [tf.squeeze(tf.cast(v, getdtype(hps, True)), [1]) for v in tf.split(1, hps.num_steps, x)]
-        inputs =  [tf.squeeze(tf.cast(v, getdtype(hps, True)), [1]) for v in tf.split(x, hps.num_steps, 1)]
+        inputs = [tf.squeeze(tf.cast(v, getdtype(hps, True)), [1]) for v in tf.split(x, hps.num_steps, 1)]
 
         for i in range(hps.num_layers):
-            with tf.variable_scope("lstm_%d" % i):
-                if hps.num_of_groups > 0:
-                    print("Using %d groups" % hps.num_of_groups)                    
-                    cell = GLSTMCell(hps.state_size, hps.emb_size, num_proj=hps.projected_size, number_of_groups=hps.num_of_groups, dtype=getdtype(hps, True))
+            with tf.variable_scope("lstm_%d" % i) as varscope:
+                if hps.num_of_groups > 1:
+                    print("Using %d groups" % hps.num_of_groups)
+                    cell = GLSTMCell(num_units=hps.state_size, num_proj=hps.projected_size, number_of_groups=hps.num_of_groups)
                 else:
-                    print("Not using groups")
-                    if hps.fnon_linearity=="sigmoid":
-                        print('Using sigmoid fnonlinearity')
-                        cell = FLSTMCell(hps.state_size, hps.emb_size, num_proj=hps.projected_size, factor_size=hps.fact_size, fnon_linearity=tf.sigmoid, dtype=getdtype(hps, True))
-                    elif hps.fnon_linearity=="relu":
-                        print('Using relu fnonlinearity')
-                        cell = FLSTMCell(hps.state_size, hps.emb_size, num_proj=hps.projected_size, factor_size=hps.fact_size, fnon_linearity=tf.nn.relu, dtype=getdtype(hps, True))
-                    else:
-                        print('Not using fnonlinearities')
-                        cell = FLSTMCell(hps.state_size, hps.emb_size, num_proj=hps.projected_size, factor_size=hps.fact_size, dtype=getdtype(hps, True))
+                    print("Not using groups. Standard LSTMP cell is used")
+                    cell = LSTMCell(num_units=hps.state_size, num_proj=hps.projected_size)
 
-            state = self.initial_states[i]
-            for t in range(hps.num_steps):
-                inputs[t], state = cell(inputs[t], state)
-                if hps.keep_prob < 1.0:
-                    inputs[t] = tf.nn.dropout(inputs[t], hps.keep_prob)
+                state = cell.zero_state(hps.batch_size, dtype=getdtype(hps, True))
+                for t in range(hps.num_steps):
+                    if t > 0: varscope.reuse_variables()
+                    inputs[t], state = cell(inputs[t], state)
+                    if hps.keep_prob < 1.0:
+                        inputs[t] = tf.nn.dropout(inputs[t], hps.keep_prob)
 
-            with tf.control_dependencies([self.initial_states[i].assign(state)]):
-                inputs[t] = tf.identity(inputs[t])
-
-        #inputs = tf.reshape(tf.concat(1, inputs), [-1, hps.projected_size])
         inputs = tf.reshape(tf.concat(inputs, 1), [-1, hps.projected_size])
 
         # Initialization ignores the fact that softmax_w is transposed. Twhat worked slightly better.
@@ -214,4 +195,7 @@ class LM(object):
             fact_size=None,
             fnon_linearity="none",
             num_of_groups=0,
+
+            save_model_every_min=30,
+            save_summary_every_min=16
 )
