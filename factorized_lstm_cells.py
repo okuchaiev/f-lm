@@ -7,6 +7,48 @@ from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import math_ops
 from tensorflow.python.ops import nn_ops
 from tensorflow.python.ops.math_ops import tanh
+from tensorflow.python.util import nest
+
+class ResidualWrapper(RNNCell):
+  """RNNCell wrapper that ensures cell inputs are added to the outputs."""
+
+  def __init__(self, cell):
+    """Constructs a `ResidualWrapper` for `cell`.
+    Args:
+      cell: An instance of `RNNCell`.
+    """
+    self._cell = cell
+
+  @property
+  def state_size(self):
+    return self._cell.state_size
+
+  @property
+  def output_size(self):
+    return self._cell.output_size
+
+  def __call__(self, inputs, state, scope=None):
+    """Run the cell and add its inputs to its outputs.
+    Args:
+      inputs: cell inputs.
+      state: cell state.
+      scope: optional cell scope.
+    Returns:
+      Tuple of cell outputs and new state.
+    Raises:
+      TypeError: If cell inputs and outputs have different structure (type).
+      ValueError: If cell inputs and outputs have different structure (value).
+    """
+    outputs, new_state = self._cell(inputs, state, scope=scope)
+    nest.assert_same_structure(inputs, outputs)
+    # Ensure shapes match
+    def assert_shape_match(inp, out):
+      inp.get_shape().assert_is_compatible_with(out.get_shape())
+    nest.map_structure(assert_shape_match, inputs, outputs)
+    res_outputs = nest.map_structure(
+        lambda inp, out: math_ops.scalar_mul(0.5, inp + out), inputs, outputs)
+    return res_outputs, new_state
+
 
 class GLSTMCell(RNNCell):
     """LSTM cell with groups (G-LSTM) described in "FACTORIZATION TRICKS FOR LSTM NETWORKS", ICLR 2017 workshop
@@ -106,7 +148,7 @@ class GLSTMCell(RNNCell):
         if input_size.value is None:
             raise ValueError("Could not infer input size from inputs.get_shape()[-1]")
         dtype = inputs.dtype
-        with vs.variable_scope(scope or "GLSTM_cell",
+        with vs.variable_scope(scope or "glstm_cell",
                                initializer=self._initializer):
             i_parts = []
             j_parts = []

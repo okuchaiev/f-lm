@@ -4,7 +4,7 @@ from model_utils import sharded_variable, getdtype, variable_summaries
 from common import assign_to_gpu, average_grads, find_trainable_variables
 from hparams import HParams
 from tensorflow.contrib.rnn import LSTMCell
-from factorized_lstm_cells import GLSTMCell
+from factorized_lstm_cells import GLSTMCell, ResidualWrapper
 
 
 class LM(object):
@@ -58,7 +58,7 @@ class LM(object):
             with tf.name_scope(None):  # This is needed due to EMA implementation silliness.
                 # Keep track of moving average of LSTM variables.
                 ema = tf.train.ExponentialMovingAverage(decay=0.999)
-                variables_to_average = find_trainable_variables("LSTM")
+                variables_to_average = find_trainable_variables("lstm")
                 self.train_op = tf.group(*[self.train_op, ema.apply(variables_to_average)])
                 self.avg_dict = ema.variables_to_restore(variables_to_average)
 
@@ -76,21 +76,40 @@ class LM(object):
         #inputs =  [tf.squeeze(tf.cast(v, getdtype(hps, True)), [1]) for v in tf.split(1, hps.num_steps, x)]
         inputs = [tf.squeeze(tf.cast(v, getdtype(hps, True)), [1]) for v in tf.split(x, hps.num_steps, 1)]
 
+        #layers = range(hps.num_layers)
+        #if hps.do_sharing:
+        #    layers += layers
+
+        if hps.num_of_groups > 1:
+            print("Using %d groups" % hps.num_of_groups)
+            cell = GLSTMCell(num_units=hps.state_size, num_proj=hps.projected_size, number_of_groups=hps.num_of_groups)
+        else:
+            print("Not using groups. Standard LSTMP cell is used")
+            cell = LSTMCell(num_units=hps.state_size, num_proj=hps.projected_size)
+        if hps.use_residual:
+            cell = ResidualWrapper(cell)
+
+        #for ind, i in enumerate(layers):
         for i in range(hps.num_layers):
             with tf.variable_scope("lstm_%d" % i) as varscope:
-                if hps.num_of_groups > 1:
-                    print("Using %d groups" % hps.num_of_groups)
-                    cell = GLSTMCell(num_units=hps.state_size, num_proj=hps.projected_size, number_of_groups=hps.num_of_groups)
-                else:
-                    print("Not using groups. Standard LSTMP cell is used")
-                    cell = LSTMCell(num_units=hps.state_size, num_proj=hps.projected_size)
-
                 state = cell.zero_state(hps.batch_size, dtype=getdtype(hps, True))
                 for t in range(hps.num_steps):
-                    if t > 0: varscope.reuse_variables()
+                    #if t > 0 or (hps.do_sharing and ind >= len(layers)/2): varscope.reuse_variables()
+                    if t > 0 : varscope.reuse_variables()
                     inputs[t], state = cell(inputs[t], state)
                     if hps.keep_prob < 1.0:
                         inputs[t] = tf.nn.dropout(inputs[t], hps.keep_prob)
+
+            if hps.do_sharing:
+                with tf.variable_scope("lstm_%d" % i) as varscope:
+                    state = cell.zero_state(hps.batch_size, dtype=getdtype(hps, True))
+                    for t in range(hps.num_steps):
+                        # if t > 0 or (hps.do_sharing and ind >= len(layers)/2): varscope.reuse_variables()
+                        varscope.reuse_variables()
+                        inputs[t], state = cell(inputs[t], state)
+                        if hps.keep_prob < 1.0:
+                            inputs[t] = tf.nn.dropout(inputs[t], hps.keep_prob)
+
 
         inputs = tf.reshape(tf.concat(inputs, 1), [-1, hps.projected_size])
 
@@ -119,7 +138,7 @@ class LM(object):
         loss = loss * hps.num_steps  #??????? why?
 
         emb_vars = find_trainable_variables("emb")
-        lstm_vars = find_trainable_variables("LSTM")
+        lstm_vars = find_trainable_variables("lstm")
         softmax_vars = find_trainable_variables("softmax")
 
         all_vars = emb_vars + lstm_vars + softmax_vars
@@ -176,7 +195,7 @@ class LM(object):
             max_grad_norm=10.0,
             num_delayed_steps=150,
             keep_prob=0.9,
-            optimizer = 0,
+            optimizer=0,
 
             vocab_size=793470,
             emb_size=512,
@@ -197,5 +216,7 @@ class LM(object):
             num_of_groups=0,
 
             save_model_every_min=30,
-            save_summary_every_min=16
+            save_summary_every_min=16,
+            do_sharing=False,
+            use_residual=False
 )
