@@ -62,7 +62,7 @@ class LM(object):
                 self.train_op = tf.group(*[self.train_op, ema.apply(variables_to_average)])
                 self.avg_dict = ema.variables_to_restore(variables_to_average)
 
-    def single_cell_kind(self, hps):
+    """def single_cell_kind(self, hps):
         if hps.num_of_groups > 1:
             return GLSTMCell(num_units=hps.state_size,
                              num_proj=hps.projected_size,
@@ -84,12 +84,25 @@ class LM(object):
                                                      output_keep_prob=hps.keep_prob)
             else:
                 return self.single_cell_kind(hps)
+    """
 
-
-    #def _forward(self, gpu, x, y, w):
     def _forward(self, gpu, x, y):
+        print("Setting up forward pass on GPU:%d" %gpu)
         hps = self.hps
-        #w = tf.to_float(w)
+        self.initial_states = []
+        for i in range(hps.num_layers):
+            with tf.device("/gpu:%d" % gpu):
+                state = (tf.Variable(tf.zeros([hps.batch_size, hps.state_size],
+                                             dtype=getdtype(hps, True)),
+                                    trainable=False, collections=[tf.GraphKeys.LOCAL_VARIABLES],
+                                    name="state_c_%d_%d" % (gpu, i), dtype=getdtype(hps, True)),
+                         tf.Variable(tf.zeros([hps.batch_size, hps.projected_size],
+                                              dtype=getdtype(hps, True)),
+                                     trainable=False, collections=[tf.GraphKeys.LOCAL_VARIABLES],
+                                     name="state_h_%d_%d" % (gpu, i), dtype=getdtype(hps, True)),
+                         )
+                self.initial_states += [state]
+
         emb_vars = sharded_variable("emb", [hps.vocab_size, hps.emb_size],
                                     hps.num_shards, dtype=getdtype(hps, False))
 
@@ -97,57 +110,34 @@ class LM(object):
         if hps.keep_prob < 1.0:
             x = tf.nn.dropout(x, hps.keep_prob)
 
-        #inputs =  [tf.squeeze(tf.cast(v, getdtype(hps, True)), [1]) for v in tf.split(1, hps.num_steps, x)]
-        inputs = [tf.squeeze(tf.cast(v, getdtype(hps, True)), [1]) for v in tf.split(x, hps.num_steps, 1)]
-
-        #layers = range(hps.num_layers)
-        #if hps.do_sharing:
-        #    layers += layers
-        if hps.num_layers > 1:
-            cell = tf.contrib.rnn.MultiRNNCell([self.single_cell(hps) for _ in range(hps.num_layers)])
-
-        inputs, _ = tf.contrib.rnn.static_rnn(cell=cell,
-                                              inputs=inputs,
-                                              dtype=getdtype(hps, True))
-
-        """
-        if hps.num_of_groups > 1:ls -l
-            print("Using %d groups" % hps.num_of_groups)
-            cell = GLSTMCell(num_units=hps.state_size, num_proj=hps.projected_size, number_of_groups=hps.num_of_groups)
-        else:
-            print("Not using groups. Standard LSTMP cell is used")
-            cell = LSTMCell(num_units=hps.state_size, num_proj=hps.projected_size)
-
-        if hps.use_residual:
-            cell = ResidualWrapper(cell)
-
-        #for ind, i in enumerate(layers):
-        self.inital_states = []
+        inputs = [tf.squeeze(input=tf.cast(v, getdtype(hps, True)), axis=[1]) for v in tf.split(value=x,
+                                                                                                num_or_size_splits=hps.num_steps,
+                                                                                                axis=1)]
         for i in range(hps.num_layers):
-            with tf.device("/gpu:%d" % gpu):
-                self.inital_states.append(cell.zero_state(hps.batch_size, dtype=getdtype(hps, True)))
+            with tf.variable_scope("lstm_%d" % i) as scope:
+                if hps.num_of_groups > 1:
+                    print("Using %d groups" % hps.num_of_groups)
+                    cell = GLSTMCell(num_units=hps.state_size,
+                                     num_proj=hps.projected_size,
+                                     number_of_groups=hps.num_of_groups)
+                else:
+                    print("Using LSTMP")
+                    cell = LSTMCell(num_units=hps.state_size, num_proj=hps.projected_size)
 
-        for i in range(hps.num_layers):
-            with tf.variable_scope("lstm_%d" % i) as varscope:
-                state = self.inital_states[i]
+                state = tf.contrib.rnn.LSTMStateTuple(self.initial_states[i][0],
+                                                  self.initial_states[i][1])
                 for t in range(hps.num_steps):
-                    #if t > 0 or (hps.do_sharing and ind >= len(layers)/2): varscope.reuse_variables()
-                    if t > 0 : varscope.reuse_variables()
+                    if t > 0:
+                        scope.reuse_variables()
                     inputs[t], state = cell(inputs[t], state)
                     if hps.keep_prob < 1.0:
                         inputs[t] = tf.nn.dropout(inputs[t], hps.keep_prob)
 
-            if hps.do_sharing:
-                with tf.variable_scope("lstm_%d" % i) as varscope:
-                    state = self.inital_states[i]
-                    for t in range(hps.num_steps):
-                        # if t > 0 or (hps.do_sharing and ind >= len(layers)/2): varscope.reuse_variables()
-                        varscope.reuse_variables()
-                        inputs[t], state = cell(inputs[t], state)
-                        if hps.keep_prob < 1.0:
-                            inputs[t] = tf.nn.dropout(inputs[t], hps.keep_prob)
-        """
+                with tf.control_dependencies([self.initial_states[i][0].assign(state[0]),
+                                          self.initial_states[i][1].assign(state[1])]):
+                    inputs[t] = tf.identity(inputs[t])
 
+                # inputs = tf.reshape(tf.concat(1, inputs), [-1, hps.projected_size])
         inputs = tf.reshape(tf.concat(inputs, 1), [-1, hps.projected_size])
 
         # Initialization ignores the fact that softmax_w is transposed. Twhat worked slightly better.
