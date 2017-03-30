@@ -62,6 +62,30 @@ class LM(object):
                 self.train_op = tf.group(*[self.train_op, ema.apply(variables_to_average)])
                 self.avg_dict = ema.variables_to_restore(variables_to_average)
 
+    def single_cell_kind(self, hps):
+        if hps.num_of_groups > 1:
+            return GLSTMCell(num_units=hps.state_size,
+                             num_proj=hps.projected_size,
+                             number_of_groups=hps.num_of_groups)
+        else:
+            return LSTMCell(num_units=hps.state_size,
+                            num_proj=hps.projected_size)
+
+    def single_cell(self, hps):
+        if hps.use_residual:
+            if hps.keep_prob < 1.0:
+                return tf.contrib.rnn.DropoutWrapper(ResidualWrapper(self.single_cell_kind(hps)),
+                                                     output_keep_prob=hps.keep_prob)
+            else:
+                return ResidualWrapper(self.single_cell_kind(hps))
+        else:
+            if hps.keep_prob < 1.0:
+                return tf.contrib.rnn.DropoutWrapper(self.single_cell_kind(hps),
+                                                     output_keep_prob=hps.keep_prob)
+            else:
+                return self.single_cell_kind(hps)
+
+
     #def _forward(self, gpu, x, y, w):
     def _forward(self, gpu, x, y):
         hps = self.hps
@@ -79,13 +103,21 @@ class LM(object):
         #layers = range(hps.num_layers)
         #if hps.do_sharing:
         #    layers += layers
+        if hps.num_layers > 1:
+            cell = tf.contrib.rnn.MultiRNNCell([self.single_cell(hps) for _ in range(hps.num_layers)])
 
-        if hps.num_of_groups > 1:
+        inputs, _ = tf.contrib.rnn.static_rnn(cell=cell,
+                                              inputs=inputs,
+                                              dtype=getdtype(hps, True))
+
+        """
+        if hps.num_of_groups > 1:ls -l
             print("Using %d groups" % hps.num_of_groups)
             cell = GLSTMCell(num_units=hps.state_size, num_proj=hps.projected_size, number_of_groups=hps.num_of_groups)
         else:
             print("Not using groups. Standard LSTMP cell is used")
             cell = LSTMCell(num_units=hps.state_size, num_proj=hps.projected_size)
+
         if hps.use_residual:
             cell = ResidualWrapper(cell)
 
@@ -114,7 +146,8 @@ class LM(object):
                         inputs[t], state = cell(inputs[t], state)
                         if hps.keep_prob < 1.0:
                             inputs[t] = tf.nn.dropout(inputs[t], hps.keep_prob)
-                       
+        """
+
         inputs = tf.reshape(tf.concat(inputs, 1), [-1, hps.projected_size])
 
         # Initialization ignores the fact that softmax_w is transposed. Twhat worked slightly better.
