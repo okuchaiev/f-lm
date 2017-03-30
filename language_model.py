@@ -90,9 +90,14 @@ class LM(object):
             cell = ResidualWrapper(cell)
 
         #for ind, i in enumerate(layers):
+        self.inital_states = []
+        for i in range(hps.num_layers):
+            with tf.device("/gpu:%d" % gpu):
+                self.inital_states.append(cell.zero_state(hps.batch_size, dtype=getdtype(hps, True)))
+
         for i in range(hps.num_layers):
             with tf.variable_scope("lstm_%d" % i) as varscope:
-                state = cell.zero_state(hps.batch_size, dtype=getdtype(hps, True))
+                state = self.inital_states[i]
                 for t in range(hps.num_steps):
                     #if t > 0 or (hps.do_sharing and ind >= len(layers)/2): varscope.reuse_variables()
                     if t > 0 : varscope.reuse_variables()
@@ -102,15 +107,14 @@ class LM(object):
 
             if hps.do_sharing:
                 with tf.variable_scope("lstm_%d" % i) as varscope:
-                    state = cell.zero_state(hps.batch_size, dtype=getdtype(hps, True))
+                    state = self.inital_states[i]
                     for t in range(hps.num_steps):
                         # if t > 0 or (hps.do_sharing and ind >= len(layers)/2): varscope.reuse_variables()
                         varscope.reuse_variables()
                         inputs[t], state = cell(inputs[t], state)
                         if hps.keep_prob < 1.0:
                             inputs[t] = tf.nn.dropout(inputs[t], hps.keep_prob)
-
-
+                       
         inputs = tf.reshape(tf.concat(inputs, 1), [-1, hps.projected_size])
 
         # Initialization ignores the fact that softmax_w is transposed. Twhat worked slightly better.
