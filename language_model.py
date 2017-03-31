@@ -66,6 +66,7 @@ class LM(object):
         print("Setting up forward pass on GPU:%d" %gpu)
         hps = self.hps
         self.initial_states = []
+        self.initial_states_s = [] #for sharing experiment
         for i in range(hps.num_layers):
             with tf.device("/gpu:%d" % gpu):
                 state = (tf.Variable(tf.zeros([hps.batch_size, hps.state_size],
@@ -78,6 +79,18 @@ class LM(object):
                                      name="state_h_%d_%d" % (gpu, i), dtype=getdtype(hps, True)),
                          )
                 self.initial_states += [state]
+
+                if hps.do_sharing:
+                    state_s = (tf.Variable(tf.zeros([hps.batch_size, hps.state_size],
+                                                  dtype=getdtype(hps, True)),
+                                         trainable=False, collections=[tf.GraphKeys.LOCAL_VARIABLES],
+                                         name="state_c_s_%d_%d" % (gpu, i), dtype=getdtype(hps, True)),
+                            tf.Variable(tf.zeros([hps.batch_size, hps.projected_size],
+                                                  dtype=getdtype(hps, True)),
+                                         trainable=False, collections=[tf.GraphKeys.LOCAL_VARIABLES],
+                                         name="state_h_s_%d_%d" % (gpu, i), dtype=getdtype(hps, True)),
+                            )
+                    self.initial_states_s += [state_s]
 
         emb_vars = sharded_variable("emb", [hps.vocab_size, hps.emb_size],
                                     hps.num_shards, dtype=getdtype(hps, False))
@@ -127,7 +140,20 @@ class LM(object):
                                           self.initial_states[i][1].assign(state[1])]):
                     inputs[t] = tf.identity(inputs[t])
 
-                # inputs = tf.reshape(tf.concat(1, inputs), [-1, hps.projected_size])
+                if hps.do_sharing:
+                    print("Using sharing. Cloning layer %d on top of itself" %i)
+                    scope.reuse_variables() #re-using params. Just doubling compute in layer vertically
+                    state = tf.contrib.rnn.LSTMStateTuple(self.initial_states_s[i][0],
+                                                          self.initial_states_s[i][1])
+                    for t in range(hps.num_steps):
+                        inputs[t], state = cell(inputs[t], state)
+                        if hps.keep_prob < 1.0:
+                            inputs[t] = tf.nn.dropout(inputs[t], hps.keep_prob)
+
+                    with tf.control_dependencies([self.initial_states_s[i][0].assign(state[0]),
+                                                  self.initial_states_s[i][1].assign(state[1])]):
+                        inputs[t] = tf.identity(inputs[t])
+
         inputs = tf.reshape(tf.concat(inputs, 1), [-1, hps.projected_size])
 
         # Initialization ignores the fact that softmax_w is transposed. Twhat worked slightly better.
