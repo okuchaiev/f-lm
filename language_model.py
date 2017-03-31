@@ -4,7 +4,7 @@ from model_utils import sharded_variable, getdtype, variable_summaries
 from common import assign_to_gpu, average_grads, find_trainable_variables
 from hparams import HParams
 from tensorflow.contrib.rnn import LSTMCell
-from factorized_lstm_cells import GLSTMCell, ResidualWrapper
+from factorized_lstm_cells import GLSTMCell, ResidualWrapper, FLSTMCell
 
 
 class LM(object):
@@ -116,16 +116,30 @@ class LM(object):
         for i in range(hps.num_layers):
             with tf.variable_scope("lstm_%d" % i) as scope:
                 if hps.num_of_groups > 1:
+                    assert(hps.fact_size is None)
+                    print("Using G-LSTM")
                     print("Using %d groups" % hps.num_of_groups)
                     cell = GLSTMCell(num_units=hps.state_size,
                                      num_proj=hps.projected_size,
                                      number_of_groups=hps.num_of_groups)
                 else:
-                    print("Using LSTMP")
-                    cell = LSTMCell(num_units=hps.state_size, num_proj=hps.projected_size)
+                    if hps.fact_size:
+                        print("Using F-LSTM")
+                        print("Using factorization: %d x %d x %d" %(2*hps.projected_size, int(hps.fact_size), 4*hps.state_size))
+                        cell = FLSTMCell(num_units=hps.state_size,
+                                         num_proj=hps.projected_size,
+                                         factor_size=int(hps.fact_size))
+                    else:
+                        print("Using LSTMP")
+                        cell = LSTMCell(num_units=hps.state_size,
+                                        num_proj=hps.projected_size)
 
                 state = tf.contrib.rnn.LSTMStateTuple(self.initial_states[i][0],
                                                   self.initial_states[i][1])
+
+                if hps.use_residual:
+                    cell = ResidualWrapper(cell=cell)
+
                 for t in range(hps.num_steps):
                     if t > 0:
                         scope.reuse_variables()
