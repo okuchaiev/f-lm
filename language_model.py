@@ -62,30 +62,6 @@ class LM(object):
                 self.train_op = tf.group(*[self.train_op, ema.apply(variables_to_average)])
                 self.avg_dict = ema.variables_to_restore(variables_to_average)
 
-    """def single_cell_kind(self, hps):
-        if hps.num_of_groups > 1:
-            return GLSTMCell(num_units=hps.state_size,
-                             num_proj=hps.projected_size,
-                             number_of_groups=hps.num_of_groups)
-        else:
-            return LSTMCell(num_units=hps.state_size,
-                            num_proj=hps.projected_size)
-
-    def single_cell(self, hps):
-        if hps.use_residual:
-            if hps.keep_prob < 1.0:
-                return tf.contrib.rnn.DropoutWrapper(ResidualWrapper(self.single_cell_kind(hps)),
-                                                     output_keep_prob=hps.keep_prob)
-            else:
-                return ResidualWrapper(self.single_cell_kind(hps))
-        else:
-            if hps.keep_prob < 1.0:
-                return tf.contrib.rnn.DropoutWrapper(self.single_cell_kind(hps),
-                                                     output_keep_prob=hps.keep_prob)
-            else:
-                return self.single_cell_kind(hps)
-    """
-
     def _forward(self, gpu, x, y):
         print("Setting up forward pass on GPU:%d" %gpu)
         hps = self.hps
