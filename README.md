@@ -1,7 +1,7 @@
 # F-LM
 
 Language modeling. This codebase contains implementation of G-LSTM and
-F-LSTM cells from [1]. It also might contains some ongoing experiments.
+F-LSTM cells from [1]. It also might contain some ongoing experiments.
 
 This code was forked from https://github.com/rafaljozefowicz/lm and contains "BIGLSTM" language model baseline from [2].
 
