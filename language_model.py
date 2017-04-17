@@ -48,7 +48,7 @@ class LM(object):
             elif hps.optimizer == 4:
                 optimizer = tf.train.GradientDescentOptimizer(hps.learning_rate)
             else:
-                optimizer = tf.train.AdagradOptimizer(hps.learning_rate, initial_accumulator_value=1.0)
+                optimizer = tf.train.AdagradOptimizer(hps.learning_rate, initial_accumulator_value=1.0*float(hps.loss_scale)*float(hps.loss_scale))
             self.train_op = optimizer.apply_gradients(grads, global_step=self.global_step)
             self.summary_op = tf.summary.merge_all()
         else:
@@ -152,7 +152,7 @@ class LM(object):
     def _backward(self, loss, summaries=False):
         hps = self.hps
 
-        loss = loss * hps.num_steps  #??????? why?
+        loss = float(hps.loss_scale) * loss * hps.num_steps  #??????? why?
 
         emb_vars = find_trainable_variables("emb")
         lstm_vars = find_trainable_variables("lstm")
@@ -171,14 +171,14 @@ class LM(object):
         lstm_grads = grads[:len(lstm_vars)]
         softmax_grads = grads[len(lstm_vars):]
 
-        lstm_grads, lstm_norm = tf.clip_by_global_norm(lstm_grads, hps.max_grad_norm)
+        lstm_grads, lstm_norm = tf.clip_by_global_norm(lstm_grads, float(hps.loss_scale) * hps.max_grad_norm)
         clipped_grads = emb_grads + lstm_grads + softmax_grads
         assert len(clipped_grads) == len(orig_grads)
 
         if summaries:
             with tf.device("/cpu:0"):
                 tf.summary.scalar("model/lstm_grad_norm", lstm_norm)
-                tf.summary.scalar("model/lstm_grad_scale", tf.minimum(hps.max_grad_norm / lstm_norm, 1.0))
+                tf.summary.scalar("model/lstm_grad_scale", tf.minimum(float(hps.loss_scale) * hps.max_grad_norm / lstm_norm, 1.0))
                 tf.summary.scalar("model/lstm_weight_norm", tf.global_norm(lstm_vars))
                 #embeding vars and grads
                 for v, g in zip(emb_vars, emb_grads):
@@ -235,5 +235,6 @@ class LM(object):
             save_model_every_min=30,
             save_summary_every_min=16,
             do_sharing=False,
-            use_residual=False
+            use_residual=False,
+            loss_scale=1.0
 )
