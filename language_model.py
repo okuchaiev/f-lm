@@ -7,6 +7,7 @@ from tensorflow.contrib.rnn import LSTMCell
 from factorized_lstm_cells import GLSTMCell, ResidualWrapper, FLSTMCell
 
 
+
 class LM(object):
     def __init__(self, hps, mode="train", ps_device="/gpu:0"):
         self.hps = hps
@@ -14,6 +15,12 @@ class LM(object):
         self.x = tf.placeholder(tf.int32, [data_size, hps.num_steps])
         self.y = tf.placeholder(tf.int32, [data_size, hps.num_steps])
         #self.w = tf.placeholder(tf.int32, [data_size, hps.num_steps])
+
+        if hps.do_deep_summaries:
+            self.y_e = None # output of embedding layer
+            self.y_lstm = [] # will be list of LSTM layer outputs
+            #self.y_sm = None # softmax layer
+
 
         losses = []
         tower_grads = []
@@ -86,6 +93,9 @@ class LM(object):
         if hps.keep_prob < 1.0:
             x = tf.nn.dropout(x, hps.keep_prob)
 
+        if hps.do_deep_summaries:
+            self.y_e = x
+
         inputs = [tf.squeeze(input=tf.cast(v, getdtype(hps, True)), axis=[1]) for v in tf.split(value=x,
                                                                                                 num_or_size_splits=hps.num_steps,
                                                                                                 axis=1)]
@@ -122,6 +132,8 @@ class LM(object):
                     inputs[t], state = cell(inputs[t], state)
                     if hps.keep_prob < 1.0:
                         inputs[t] = tf.nn.dropout(inputs[t], hps.keep_prob)
+                if hps.do_deep_summaries:
+                    self.y_lstm.append(inputs[t])
 
                 with tf.control_dependencies([self.initial_states[i][0].assign(state[0]),
                                           self.initial_states[i][1].assign(state[1])]):
@@ -175,6 +187,13 @@ class LM(object):
         clipped_grads = emb_grads + lstm_grads + softmax_grads
         assert len(clipped_grads) == len(orig_grads)
 
+        if hps.do_deep_summaries:
+            self.dgrad_E = tf.gradients(loss, self.y_e, aggregation_method=tf.AggregationMethod.EXPERIMENTAL_ACCUMULATE_N)
+            self.dgrad_LSTM = []
+            for step in range(hps.num_layers):
+                self.dgrad_LSTM.append(tf.gradients(loss, self.y_lstm[step], aggregation_method=tf.AggregationMethod.EXPERIMENTAL_ACCUMULATE_N))
+
+
         if summaries:
             with tf.device("/cpu:0"):
                 tf.summary.scalar("model/lstm_grad_norm", lstm_norm)
@@ -198,6 +217,13 @@ class LM(object):
                     gname = 'dLoss_by_' + name
                     variable_summaries(v, "Softmax_weights", name)
                     variable_summaries(g, "Softmax_gradients", gname)
+
+                if hps.do_deep_summaries:
+                    variable_summaries(self.dgrad_E, "DgradEmenbedding", "EmbDgrad")
+                    for i in range(hps.num_layers):
+                        variable_summaries(self.dgrad_LSTM[i], "LSTM Dgrads Layer : " + str(i), "LstmDgrad")
+
+
 
         return list(zip(clipped_grads, all_vars))
 
@@ -226,6 +252,7 @@ class LM(object):
             average_params=True,
             run_profiler=False,
             do_summaries=False,
+            do_deep_summaries=False,
             max_time=180,
 
             fact_size=None,
