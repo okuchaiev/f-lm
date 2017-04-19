@@ -93,7 +93,7 @@ class LM(object):
         if hps.keep_prob < 1.0:
             x = tf.nn.dropout(x, hps.keep_prob)
 
-        if hps.do_deep_summaries:
+        if hps.do_deep_summaries and (gpu == hps.num_gpus - 1):
             self.y_e = x
 
         inputs = [tf.squeeze(input=tf.cast(v, getdtype(hps, True)), axis=[1]) for v in tf.split(value=x,
@@ -132,7 +132,7 @@ class LM(object):
                     inputs[t], state = cell(inputs[t], state)
                     if hps.keep_prob < 1.0:
                         inputs[t] = tf.nn.dropout(inputs[t], hps.keep_prob)
-                if hps.do_deep_summaries:
+                if hps.do_deep_summaries and (gpu == hps.num_gpus - 1):
                     self.y_lstm.append(inputs[t])
 
                 with tf.control_dependencies([self.initial_states[i][0].assign(state[0]),
@@ -187,7 +187,7 @@ class LM(object):
         clipped_grads = emb_grads + lstm_grads + softmax_grads
         assert len(clipped_grads) == len(orig_grads)
 
-        if hps.do_deep_summaries:
+        if hps.do_deep_summaries and summaries:
             self.dgrad_E = tf.gradients(loss, self.y_e, aggregation_method=tf.AggregationMethod.EXPERIMENTAL_ACCUMULATE_N)
             self.dgrad_LSTM = []
             for step in range(hps.num_layers):
@@ -221,7 +221,7 @@ class LM(object):
                 if hps.do_deep_summaries:
                     variable_summaries(self.dgrad_E, "DgradEmenbedding", "EmbDgrad")
                     for i in range(hps.num_layers):
-                        variable_summaries(self.dgrad_LSTM[i], "LSTM Dgrads Layer : " + str(i), "LstmDgrad")
+                        variable_summaries(self.dgrad_LSTM[i], "LSTM Dgrads Layer_" + str(i), "LstmDgrad")
 
 
 
