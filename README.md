@@ -7,6 +7,9 @@ This code was forked from https://github.com/rafaljozefowicz/lm and contains "BI
 
 Current code runs on Tensorflow r1.0 and supports multi-GPU data parallelism using synchronized gradient updates.
 
+# Best perplexity
+On One Billion Words benchmark using 8 GPUs in one DGX-1, BIG G-LSTM G4 was able to achieve 24.29 after 2 weeks of training and 23.36 after 3 weeks.
+
 # Performance
 Not using XLA optimization for now. To be tested.
 (In all experiments minibatch of 128 per GPU is used)
