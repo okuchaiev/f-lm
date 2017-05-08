@@ -4,7 +4,7 @@ from model_utils import sharded_variable, getdtype, variable_summaries
 from common import assign_to_gpu, average_grads, find_trainable_variables
 from hparams import HParams
 from tensorflow.contrib.rnn import LSTMCell
-from factorized_lstm_cells import GLSTMCell, ResidualWrapper, FLSTMCell
+from factorized_lstm_cells import GLSTMCell, ResidualWrapper, FLSTMCell, XLSTMCell
 
 
 
@@ -119,9 +119,14 @@ class LM(object):
                                          num_proj=hps.projected_size,
                                          factor_size=int(hps.fact_size))
                     else:
-                        print("Using LSTMP")
-                        cell = LSTMCell(num_units=hps.state_size,
-                                        num_proj=hps.projected_size)
+                        if hps.float16:
+                            print("Using XLSTM")
+                            cell = XLSTMCell(num_units=hps.state_size,
+                                             num_proj=hps.projected_size)
+                        else:
+                            print("Using LSTMP")
+                            cell = LSTMCell(num_units=hps.state_size,
+                                            num_proj=hps.projected_size)
 
                 if hps.float16:
                     state = tf.contrib.rnn.LSTMStateTuple(tf.cast(self.initial_states[i][0], dtype=tf.float16),

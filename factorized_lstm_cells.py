@@ -8,6 +8,7 @@ from tensorflow.python.ops import math_ops
 from tensorflow.python.ops import nn_ops
 from tensorflow.python.ops.math_ops import tanh
 from tensorflow.python.util import nest
+from tensorflow.python.framework import dtypes
 
 class ResidualWrapper(RNNCell):
   """RNNCell wrapper that ensures cell inputs are added to the outputs.
@@ -302,3 +303,133 @@ class FLSTMCell(RNNCell):
 
         new_state = LSTMStateTuple(c, m)
         return m, new_state
+
+
+def Xlinear(args, output_size, bias, bias_start=0.0, scope=None):
+  """
+  """
+  if args is None or (nest.is_sequence(args) and not args):
+    raise ValueError("`args` must be specified")
+  if not nest.is_sequence(args):
+    args = [args]
+
+  # Calculate the total size of arguments on dimension 1.
+  total_arg_size = 0
+  shapes = [a.get_shape() for a in args]
+  for shape in shapes:
+    if shape.ndims != 2:
+      raise ValueError("linear is expecting 2D arguments: %s" % shapes)
+    if shape[1].value is None:
+      raise ValueError("linear expects shape[1] to be provided for shape %s, "
+                       "but saw %s" % (shape, shape[1]))
+    else:
+      total_arg_size += shape[1].value
+
+  #dtype = [a.dtype for a in args][0]
+
+  # Now the computation.
+  scope = vs.get_variable_scope()
+  with vs.variable_scope(scope) as outer_scope:
+    weights = vs.get_variable(
+        "weights", [total_arg_size, output_size], dtype=dtypes.float32)
+    if len(args) == 1:
+      res = math_ops.matmul(args[0], math_ops.cast(weights, dtype=dtypes.float16))
+    else:
+      res = math_ops.matmul(array_ops.concat(args, 1), math_ops.cast(weights, dtype=dtypes.float16))
+    if not bias:
+      return res
+    with vs.variable_scope(outer_scope) as inner_scope:
+      inner_scope.set_partitioner(None)
+      biases = vs.get_variable(
+          "biases", [output_size],
+          dtype=dtypes.float32,
+          initializer=init_ops.constant_initializer(bias_start, dtype=dtypes.float32))
+  return nn_ops.bias_add(res, math_ops.cast(biases, dtype=dtypes.float16))
+
+class XLSTMCell(RNNCell):
+  """
+  """
+
+  def __init__(self, num_units,
+               initializer=None,
+               num_proj=None,
+               forget_bias=1.0,
+               activation=tanh):
+    """
+    Initializes parameters of F-LSTM cell
+    :param num_units: int, The number of units in the G-LSTM cell
+    :param initializer: (optional) The initializer to use for the weight and
+        projection matrices.
+    :param num_proj: (optional) int, The output dimensionality for the projection
+        matrices.  If None, no projection is performed.
+    :param factor_size: factorization size
+    :param forget_bias: Biases of the forget gate are initialized by default to 1
+        in order to reduce the scale of forgetting at the beginning of
+        the training.
+    :param activation: Activation function of the inner states.
+    """
+
+    self._num_units = num_units
+    self._initializer = initializer
+    self._num_proj = num_proj
+    self._forget_bias = forget_bias
+    self._activation = activation
+
+    if num_proj:
+      self._state_size = (LSTMStateTuple(num_units, num_proj))
+      self._output_size = num_proj
+    else:
+      self._state_size = (LSTMStateTuple(num_units, num_units))
+      self._output_size = num_units
+
+  @property
+  def state_size(self):
+    return self._state_size
+
+  @property
+  def output_size(self):
+    return self._output_size
+
+  def __call__(self, inputs, state, scope=None):
+    """Run one step of F-LSTM.
+
+    Args:
+      inputs: input Tensor, 2D, batch x num_units.
+      state: this must be a tuple of state Tensors, both `2-D`, with column sizes `c_state` and `m_state`.
+      scope: not used
+
+    Returns:
+      A tuple containing:
+
+      - A `2-D, [batch x output_dim]`, Tensor representing the output of the
+        F-LSTM after reading `inputs` when previous state was `state`.
+        Here output_dim is:
+           num_proj if num_proj was set,
+           num_units otherwise.
+      - Tensor(s) representing the new state of F-LSTM after reading `inputs` when
+        the previous state was `state`.  Same type and shape(s) as `state`.
+
+    Raises:
+      ValueError: If input size cannot be inferred from inputs via
+        static shape inference.
+    """
+    (c_prev, m_prev) = state
+
+    input_size = inputs.get_shape().with_rank(2)[1]
+    if input_size.value is None:
+      raise ValueError("Could not infer input size from inputs.get_shape()[-1]")
+    with vs.variable_scope(scope or "xlstm_cell",
+                           initializer=self._initializer):
+      concat = Xlinear([inputs, m_prev], 4 * self._num_units, True)
+      # i = input_gate, j = new_input, f = forget_gate, o = output_gate
+      i, j, f, o = array_ops.split(value=concat, num_or_size_splits=4, axis=1)
+
+    c = math_ops.sigmoid(f + self._forget_bias) * c_prev + math_ops.sigmoid(i) * math_ops.tanh(j)
+    m = math_ops.sigmoid(o) * self._activation(c)
+
+    if self._num_proj is not None:
+      with vs.variable_scope("projection"):
+        m = Xlinear(m, self._num_proj, bias=False, scope=scope)
+
+    new_state = LSTMStateTuple(c, m)
+    return m, new_state
