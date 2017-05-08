@@ -76,18 +76,18 @@ class LM(object):
         for i in range(hps.num_layers):
             with tf.device("/gpu:%d" % gpu):
                 state = (tf.Variable(tf.zeros([hps.batch_size, hps.state_size],
-                                             dtype=getdtype(hps, True)),
+                                             dtype=tf.float32),
                                     trainable=False, collections=[tf.GraphKeys.LOCAL_VARIABLES],
-                                    name="state_c_%d_%d" % (gpu, i), dtype=getdtype(hps, True)),
+                                    name="state_c_%d_%d" % (gpu, i), dtype=tf.float32),
                          tf.Variable(tf.zeros([hps.batch_size, hps.projected_size],
-                                              dtype=getdtype(hps, True)),
+                                              dtype=tf.float32),
                                      trainable=False, collections=[tf.GraphKeys.LOCAL_VARIABLES],
-                                     name="state_h_%d_%d" % (gpu, i), dtype=getdtype(hps, True)),
+                                     name="state_h_%d_%d" % (gpu, i), dtype=tf.float32),
                          )
                 self.initial_states += [state]
 
         emb_vars = sharded_variable("emb", [hps.vocab_size, hps.emb_size],
-                                    hps.num_shards, dtype=getdtype(hps, False))
+                                    hps.num_shards, dtype=tf.float32)
 
         x = tf.nn.embedding_lookup(emb_vars, x)  # [bs, steps, emb_size]
         if hps.keep_prob < 1.0:
@@ -96,8 +96,11 @@ class LM(object):
         if hps.do_deep_summaries and (gpu == hps.num_gpus - 1):
             self.y_e = x
 
-        inputs = [tf.squeeze(input=tf.cast(v, getdtype(hps, True)), axis=[1]) for v in tf.split(value=x,
-                                                                                                num_or_size_splits=hps.num_steps,
+        if hps.float16:
+            inputs = [tf.squeeze(input=tf.cast(v, tf.float16), axis=[1]) for v in tf.split(value=x, num_or_size_splits=hps.num_steps,
+                                                                      axis=1)]
+        else:
+            inputs = [tf.squeeze(input=v, axis=[1]) for v in tf.split(value=x, num_or_size_splits=hps.num_steps,
                                                                                                 axis=1)]
         for i in range(hps.num_layers):
             with tf.variable_scope("lstm_%d" % i) as scope:
@@ -120,8 +123,12 @@ class LM(object):
                         cell = LSTMCell(num_units=hps.state_size,
                                         num_proj=hps.projected_size)
 
-                state = tf.contrib.rnn.LSTMStateTuple(self.initial_states[i][0],
-                                                  self.initial_states[i][1])
+                if hps.float16:
+                    state = tf.contrib.rnn.LSTMStateTuple(tf.cast(self.initial_states[i][0], dtype=tf.float16),
+                                                          tf.cast(self.initial_states[i][1], dtype=tf.float16))
+                else:
+                    state = tf.contrib.rnn.LSTMStateTuple(self.initial_states[i][0],
+                                                          self.initial_states[i][1])
 
                 if hps.use_residual:
                     cell = ResidualWrapper(cell=cell)
@@ -135,16 +142,24 @@ class LM(object):
                 if hps.do_deep_summaries and (gpu == hps.num_gpus - 1):
                     self.y_lstm.append(inputs[t])
 
-                with tf.control_dependencies([self.initial_states[i][0].assign(state[0]),
-                                          self.initial_states[i][1].assign(state[1])]):
+                with tf.control_dependencies([self.initial_states[i][0].assign(tf.cast(state[0],
+                                                                                       dtype=self.initial_states[i][0].dtype)),
+                                          self.initial_states[i][1].assign(tf.cast(state[1],
+                                                                                   dtype=self.initial_states[i][1].dtype))]):
                     inputs[t] = tf.identity(inputs[t])
 
                 # inputs = tf.reshape(tf.concat(1, inputs), [-1, hps.projected_size])
         inputs = tf.reshape(tf.concat(inputs, 1), [-1, hps.projected_size])
 
         # Initialization ignores the fact that softmax_w is transposed. Twhat worked slightly better.
-        softmax_w = sharded_variable("softmax_w", [hps.vocab_size, hps.projected_size], hps.num_shards)
-        softmax_b = tf.get_variable("softmax_b", [hps.vocab_size])
+        softmax_w = sharded_variable("softmax_w", [hps.vocab_size, hps.projected_size], hps.num_shards,
+                                     dtype=tf.float32)
+        softmax_b = tf.get_variable("softmax_b", [hps.vocab_size], dtype=tf.float32)
+
+
+        #if hps.float16:
+        #    softmax_b = tf.cast(softmax_b, dtype=tf.float16)
+        #    softmax_w = [tf.cast(v, dtype=tf.float16) for v in softmax_w]
 
         if hps.num_sampled == 0:
             full_softmax_w = tf.reshape(tf.concat(softmax_w, 1), [-1, hps.projected_size])
@@ -156,8 +171,10 @@ class LM(object):
         else:
             targets = tf.reshape(y, [-1, 1])
             loss = tf.nn.sampled_softmax_loss(softmax_w, softmax_b, targets, tf.to_float(inputs),
-                                               hps.num_sampled, hps.vocab_size)
+                                              hps.num_sampled, hps.vocab_size)
+
         #loss = tf.reduce_mean(loss * tf.reshape(w, [-1]))
+        #loss = tf.reduce_mean(loss)
         loss = tf.reduce_mean(loss)
         return loss
 
@@ -176,8 +193,9 @@ class LM(object):
         emb_grads = grads[:len(emb_vars)]
         grads = grads[len(emb_vars):]
         for i in range(len(emb_grads)):
-            assert isinstance(emb_grads[i], tf.IndexedSlices)
-            emb_grads[i] = tf.IndexedSlices(emb_grads[i].values * hps.batch_size, emb_grads[i].indices,
+            #assert isinstance(emb_grads[i], tf.IndexedSlices)
+            if isinstance(emb_grads[i], tf.IndexedSlices):
+                emb_grads[i] = tf.IndexedSlices(emb_grads[i].values * hps.batch_size, emb_grads[i].indices,
                                             emb_grads[i].dense_shape)
 
         lstm_grads = grads[:len(lstm_vars)]
@@ -247,8 +265,7 @@ class LM(object):
             num_sampled=8192,
             num_gpus=8,
 
-            float16_rnn=False,
-            float16_non_rnn=False,
+            float16=False,
             average_params=True,
             run_profiler=False,
             do_summaries=False,

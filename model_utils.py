@@ -18,10 +18,14 @@ def variable_summaries(var, groupname, name):
         tf.summary.histogram(groupname + "/" + name, s_var)
 
 def getdtype(hps, is_rnn=False):
-    if is_rnn:
-        return tf.float16 if hps.float16_rnn else tf.float32
+    if hps.float16:
+        return tf.float16
     else:
-        return tf.float16 if hps.float16_non_rnn else tf.float32
+        return tf.float32
+    #if is_rnn:
+    #    return tf.float16 if hps.float16_rnn else tf.float32
+    #else:
+    #    return tf.float16 if hps.float16_non_rnn else tf.float32
 
 
 def linear(x, size, name):
@@ -38,8 +42,8 @@ def sharded_variable(name, shape, num_shards, dtype=tf.float32, transposed=False
         initializer = tf.uniform_unit_scaling_initializer(dtype=dtype)
     else:        
         initializer = tf.uniform_unit_scaling_initializer(dtype=dtype)
-    return [tf.get_variable(name + "_" + str(i), [shard_size, shape[1]],
-                            initializer=initializer, dtype=dtype) for i in range(num_shards)]
+    return [tf.cast(tf.get_variable(name + "_" + str(i), [shard_size, shape[1]],
+                            initializer=initializer, dtype=dtype), dtype=tf.float32) for i in range(num_shards)]
 
 
 # XXX(rafal): Code below copied from rnn_cell.py
