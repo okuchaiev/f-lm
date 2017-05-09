@@ -305,47 +305,6 @@ class FLSTMCell(RNNCell):
         return m, new_state
 
 
-def Xlinear(args, output_size, bias, bias_start=0.0, scope=None):
-  """
-  """
-  if args is None or (nest.is_sequence(args) and not args):
-    raise ValueError("`args` must be specified")
-  if not nest.is_sequence(args):
-    args = [args]
-
-  # Calculate the total size of arguments on dimension 1.
-  total_arg_size = 0
-  shapes = [a.get_shape() for a in args]
-  for shape in shapes:
-    if shape.ndims != 2:
-      raise ValueError("linear is expecting 2D arguments: %s" % shapes)
-    if shape[1].value is None:
-      raise ValueError("linear expects shape[1] to be provided for shape %s, "
-                       "but saw %s" % (shape, shape[1]))
-    else:
-      total_arg_size += shape[1].value
-
-  #dtype = [a.dtype for a in args][0]
-
-  # Now the computation.
-  scope = vs.get_variable_scope()
-  with vs.variable_scope(scope) as outer_scope:
-    weights = vs.get_variable(
-        "weights", [total_arg_size, output_size], dtype=dtypes.float32)
-    if len(args) == 1:
-      res = math_ops.matmul(args[0], math_ops.cast(weights, dtype=dtypes.float16))
-    else:
-      res = math_ops.matmul(array_ops.concat(args, 1), math_ops.cast(weights, dtype=dtypes.float16))
-    if not bias:
-      return res
-    with vs.variable_scope(outer_scope) as inner_scope:
-      inner_scope.set_partitioner(None)
-      biases = vs.get_variable(
-          "biases", [output_size],
-          dtype=dtypes.float32,
-          initializer=init_ops.constant_initializer(bias_start, dtype=dtypes.float32))
-  return nn_ops.bias_add(res, math_ops.cast(biases, dtype=dtypes.float16))
-
 class XLSTMCell(RNNCell):
   """
   """
@@ -381,6 +340,21 @@ class XLSTMCell(RNNCell):
     else:
       self._state_size = (LSTMStateTuple(num_units, num_units))
       self._output_size = num_units
+
+    scope = vs.get_variable_scope()
+    with vs.variable_scope(scope) as outer_scope:
+      self.weights32 = vs.get_variable(
+        "weights32", [2*num_proj, 4*num_units], dtype=dtypes.float32)
+      self.biases32 = vs.get_variable(
+          "biases", [4*num_units],
+          dtype=dtypes.float32,
+          initializer=init_ops.constant_initializer(0.0, dtype=dtypes.float32))
+      self.proj32 = vs.get_variable(
+        "projection32", [num_units, num_proj], dtype=dtypes.float32)
+
+      self.weights = math_ops.cast(self.weights32, dtypes.float16)
+      self.biases = math_ops.cast(self.biases32, dtypes.float16)
+      self.proj = math_ops.cast(self.proj32, dtype=dtypes.float16)
 
   @property
   def state_size(self):
@@ -420,7 +394,8 @@ class XLSTMCell(RNNCell):
       raise ValueError("Could not infer input size from inputs.get_shape()[-1]")
     with vs.variable_scope(scope or "xlstm_cell",
                            initializer=self._initializer):
-      concat = Xlinear([inputs, m_prev], 4 * self._num_units, True)
+      #concat = Xlinear([inputs, m_prev], 4 * self._num_units, True)
+      concat = nn_ops.xw_plus_b(array_ops.concat([inputs, m_prev], 1), self.weights, self.biases)
       # i = input_gate, j = new_input, f = forget_gate, o = output_gate
       i, j, f, o = array_ops.split(value=concat, num_or_size_splits=4, axis=1)
 
@@ -429,7 +404,8 @@ class XLSTMCell(RNNCell):
 
     if self._num_proj is not None:
       with vs.variable_scope("projection"):
-        m = Xlinear(m, self._num_proj, bias=False, scope=scope)
+        #m = Xlinear(m, self._num_proj, bias=False, scope=scope)
+        m = math_ops.matmul(m, self.proj)
 
     new_state = LSTMStateTuple(c, m)
     return m, new_state
