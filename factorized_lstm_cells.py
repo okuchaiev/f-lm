@@ -346,7 +346,7 @@ class XLSTMCell(RNNCell):
       self.weights32 = vs.get_variable(
         "weights32", [2*num_proj, 4*num_units], dtype=dtypes.float32)
       self.biases32 = vs.get_variable(
-          "biases", [4*num_units],
+          "biases32", [4*num_units],
           dtype=dtypes.float32,
           initializer=init_ops.constant_initializer(0.0, dtype=dtypes.float32))
       self.proj32 = vs.get_variable(
