@@ -52,10 +52,20 @@ LOGSUFFIX=BIGLSTM
 python /home/okuchaiev/repos/f-lm/single_lm_train.py --logdir=/raid/okuchaiev/Workspace/LM/FGLSTM/$LOGSUFFIX --num_gpus=8 --datadir=/raid/okuchaiev/Data/LM1B/1-billion-word-language-modeling-benchmark-r13output/ --hpconfig run_profiler=False,float16_rnn=False,max_time=$SECONDS,num_steps=20,num_shards=8,num_layers=2,learning_rate=0.2,max_grad_norm=1,keep_prob=0.9,emb_size=1024,projected_size=1024,state_size=8192,num_sampled=8192,batch_size=128  > train_$LOGSUFFIX.log 2>&1
 
 #eval
-python /home/okuchaiev/repos/f-lm/single_lm_train.py --logdir=/raid/okuchaiev/Workspace/LM/FGLSTM/$LOGSUFFIX --num_gpus=8 --datadir=/raid/okuchaiev/Data/LM1B/1-billion-word-language-modeling-benchmark-r13output/ --mode=eval_full --hpconfig run_profiler=False,float16_rnn=False,max_time=$SECONDS,num_steps=20,num_shards=8,num_layers=2,learning_rate=0.2,max_grad_norm=1,keep_prob=0.9,emb_size=1024,projected_size=1024,state_size=8192,num_sampled=8192,batch_size=16 > eval_full_$LOGSUFFIX.log 2>&1
+python /home/okuchaiev/repos/f-lm/single_lm_train.py --logdir=/raid/okuchaiev/Workspace/LM/FGLSTM/$LOGSUFFIX --num_gpus=1 --datadir=/raid/okuchaiev/Data/LM1B/1-billion-word-language-modeling-benchmark-r13output/ --mode=eval_full --hpconfig run_profiler=False,float16_rnn=False,max_time=$SECONDS,num_steps=20,num_shards=8,num_layers=2,learning_rate=0.2,max_grad_norm=1,keep_prob=0.9,emb_size=1024,projected_size=1024,state_size=8192,num_sampled=8192,batch_size=4 > eval_full_$LOGSUFFIX.log 2>&1
 ```
+
 * To use G-LSTM cell specify ```num_of_groups``` parameter.
 * To use F-LSTM cell specify ```fact_size``` parameter.
+
+Note, that current data reader may miss some tokens when constructing mini-batches which can have a minor effect on final perplexity.
+
+**For most accurate results**, use batch_size=1 and num_steps=1 in evaluation. Thanks to [Ciprian](https://github.com/ciprian-chelba) for noticing this.
+
+## Pre-trained model
+The best model reported in the paper can be found here: https://drive.google.com/file/d/12NT30_wont7evwSl1IT5ECXgwDpIWER3/view?usp=sharing
+
+
 
 ## To change hyper-parameters
 
