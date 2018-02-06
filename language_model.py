@@ -3,8 +3,8 @@ import tensorflow as tf
 from model_utils import sharded_variable, getdtype, variable_summaries
 from common import assign_to_gpu, average_grads, find_trainable_variables
 from hparams import HParams
-from tensorflow.contrib.rnn import LSTMCell
-from factorized_lstm_cells import GLSTMCell, ResidualWrapper, FLSTMCell
+#from tensorflow.contrib.rnn import LSTMCell
+from glstm import GLSTMCell
 
 
 class LM(object):
@@ -69,7 +69,7 @@ class LM(object):
         for i in range(hps.num_layers):
             with tf.device("/gpu:%d" % gpu):
                 state = (tf.Variable(tf.zeros([hps.batch_size, hps.state_size],
-                                             dtype=getdtype(hps, True)),
+                                               dtype=getdtype(hps, True)),
                                     trainable=False, collections=[tf.GraphKeys.LOCAL_VARIABLES],
                                     name="state_c_%d_%d" % (gpu, i), dtype=getdtype(hps, True)),
                          tf.Variable(tf.zeros([hps.batch_size, hps.projected_size],
@@ -99,22 +99,15 @@ class LM(object):
                                      num_proj=hps.projected_size,
                                      number_of_groups=hps.num_of_groups)
                 else:
-                    if hps.fact_size:
-                        print("Using F-LSTM")
-                        print("Using factorization: %d x %d x %d" %(2*hps.projected_size, int(hps.fact_size), 4*hps.state_size))
-                        cell = FLSTMCell(num_units=hps.state_size,
-                                         num_proj=hps.projected_size,
-                                         factor_size=int(hps.fact_size))
-                    else:
-                        print("Using LSTMP")
-                        cell = LSTMCell(num_units=hps.state_size,
-                                        num_proj=hps.projected_size)
+                    print("Using LSTMP")
+                    cell = tf.nn.rnn_cell.LSTMCell(num_units=hps.state_size,
+                                    num_proj=hps.projected_size)
 
                 state = tf.contrib.rnn.LSTMStateTuple(self.initial_states[i][0],
                                                   self.initial_states[i][1])
 
                 if hps.use_residual:
-                    cell = ResidualWrapper(cell=cell)
+                    cell = tf.contrib.rnn.ResidualWrapper(cell=cell)
 
                 for t in range(hps.num_steps):
                     if t > 0:
@@ -127,7 +120,6 @@ class LM(object):
                                           self.initial_states[i][1].assign(state[1])]):
                     inputs[t] = tf.identity(inputs[t])
 
-                # inputs = tf.reshape(tf.concat(1, inputs), [-1, hps.projected_size])
         inputs = tf.reshape(tf.concat(inputs, 1), [-1, hps.projected_size])
 
         # Initialization ignores the fact that softmax_w is transposed. Twhat worked slightly better.

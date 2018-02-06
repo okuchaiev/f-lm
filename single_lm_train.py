@@ -24,9 +24,9 @@ def main(_):
     """
     hps = LM.get_default_hparams().parse(FLAGS.hpconfig)
     hps._set("num_gpus", FLAGS.num_gpus)
-    print '*****HYPER PARAMETERS*****'
-    print hps
-    print '**************************'
+    print('*****HYPER PARAMETERS*****')
+    print(hps)
+    print('**************************')
 
     vocab = Vocabulary.from_file(os.path.join(FLAGS.datadir, "1b_word_vocab.txt"))
 
