@@ -5,7 +5,7 @@ from common import assign_to_gpu, average_grads, find_trainable_variables
 from hparams import HParams
 #from tensorflow.contrib.rnn import LSTMCell
 from glstm import GLSTMCell
-
+from flstm import FLSTMCell
 
 class LM(object):
     def __init__(self, hps, mode="train", ps_device="/gpu:0"):
@@ -98,10 +98,17 @@ class LM(object):
                     cell = GLSTMCell(num_units=hps.state_size,
                                      num_proj=hps.projected_size,
                                      number_of_groups=hps.num_of_groups)
+                elif hps.fact_size is not None:
+                    print("Using FLSTM")
+                    cell = FLSTMCell(num_units=hps.state_size,
+                                     fact_size=hps.fact_size,
+                                     num_proj=hps.projected_size)
                 else:
                     print("Using LSTMP")
+                    print("Using peepholes: %s" % hps.use_peepholes)
                     cell = tf.nn.rnn_cell.LSTMCell(num_units=hps.state_size,
-                                    num_proj=hps.projected_size)
+                                                   num_proj=hps.projected_size,
+                                                   use_peepholes=hps.use_peepholes)
 
                 state = tf.contrib.rnn.LSTMStateTuple(self.initial_states[i][0],
                                                   self.initial_states[i][1])
@@ -223,6 +230,7 @@ class LM(object):
             fact_size=None,
             fnon_linearity="none",
             num_of_groups=0,
+            use_peepholes=False,
 
             save_model_every_min=30,
             save_summary_every_min=16,
