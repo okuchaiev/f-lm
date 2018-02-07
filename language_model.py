@@ -228,5 +228,6 @@ class LM(object):
             save_summary_every_min=16,
             do_sharing=False,
             use_residual=False,
-            loss_scale=1.0
+            loss_scale=1.0,
+            max_steps=3000000
 )

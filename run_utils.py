@@ -95,6 +95,8 @@ def run_train(dataset, hps, logdir, ps_device, task=0, master=""):
                 print("Iteration %d, time = %.2fs, wps = %.0f, train loss = %.4f" % (
                     cur_global_step, cur_time - prev_time, wps, fetched[1]))
                 prev_time = cur_time
+            if local_step >= hps.max_steps:
+                break
         #save last model
         sv._saver.save(sess, sv.save_path, cur_global_step)
     sv.stop()
