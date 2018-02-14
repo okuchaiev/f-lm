@@ -140,6 +140,12 @@ class LM(object):
             logits = tf.matmul(tf.to_float(inputs), full_softmax_w, transpose_b=True) + softmax_b
             targets = tf.reshape(y, [-1])
             loss = tf.nn.sparse_softmax_cross_entropy_with_logits(logits=logits, labels=targets)
+        elif hps.num_sampled == -1: # hack to force into inference mode
+            full_softmax_w = tf.reshape(tf.concat(softmax_w, 1), [-1, hps.projected_size])
+            full_softmax_w = full_softmax_w[:hps.vocab_size, :]
+            logits = tf.matmul(tf.to_float(inputs), full_softmax_w, transpose_b=True) + softmax_b
+            self.samples = tf.arg_max(input=logits, dimension=1)
+            loss = tf.zeros(shape=[1], dtype=tf.float32)
         else:
             targets = tf.reshape(y, [-1, 1])
             loss = tf.nn.sampled_softmax_loss(softmax_w, softmax_b, targets, tf.to_float(inputs),

@@ -158,3 +158,40 @@ def run_eval(dataset, hps, logdir, mode, num_eval_steps):
             sw.flush()
             if mode == "eval_full":
                 break #we don't need to wait for other checkpoints in this mode
+
+
+def run_infer(dataset, hps, logdir, mode, vocab):
+    with tf.variable_scope("model"):
+        hps.num_sampled = -1  # This will tell model to skip the loss part
+        hps.keep_prob = 1.0
+        # model = LM(hps, "eval", "/cpu:0")
+        model = LM(hps, "eval", "/gpu:0")
+
+    if hps.average_params:
+        print("Averaging parameters for evaluation.")
+        saver = tf.train.Saver(model.avg_dict)
+    else:
+        saver = tf.train.Saver()
+
+    config = tf.ConfigProto(allow_soft_placement=True)
+    sess = tf.Session(config=config)
+    sw = tf.summary.FileWriter(logdir + "/" + mode, sess.graph)
+    ckpt_loader = CheckpointLoader(saver, model.global_step, logdir + "/train")
+    with sess.as_default():
+        while ckpt_loader.load_checkpoint():
+            global_step = ckpt_loader.last_global_step
+            data_iterator = dataset.iterate_once(hps.batch_size * hps.num_gpus, hps.num_steps)
+            tf.local_variables_initializer().run()
+            for i, (x, y) in enumerate(data_iterator):
+                # loss = sess.run(model.loss, {model.x: x, model.y: y, model.w: w})
+                samples = sess.run(model.samples, {model.x: x, model.y: y})
+                if i % 100 == 0:
+                    print("SAMPLES")
+                    print([vocab.get_token(int(t)) for t in samples])
+                    print("TARGETS")
+                    print([vocab.get_token(int(t)) for t in y[0]])
+                    #sys.stdout.write("%d: %.3f (%.3f) ... " % (i, loss, np.exp(loss)))
+                    #sys.stdout.flush()
+            #sys.stdout.write("\n")
+
+

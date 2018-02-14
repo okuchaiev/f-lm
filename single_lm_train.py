@@ -6,7 +6,7 @@ import os
 import tensorflow as tf
 from data_utils import Vocabulary, Dataset
 from language_model import LM
-from run_utils import run_train, run_eval
+from run_utils import run_train, run_eval, run_infer
 
 tf.flags.DEFINE_string("logdir", "lm1b", "Logging directory.")
 tf.flags.DEFINE_string("datadir", None, "Logging directory.")
@@ -44,6 +44,10 @@ def main(_):
             data_dir = os.path.join(FLAGS.datadir, "heldout-monolingual.tokenized.shuffled/news.en.heldout-00000-of-00050")
         dataset = Dataset(vocab, data_dir, deterministic=True)
         run_eval(dataset, hps, FLAGS.logdir, FLAGS.mode, FLAGS.eval_steps)
+    elif FLAGS.mode.startswith("infer"):
+        data_dir = os.path.join(FLAGS.datadir, "heldout-monolingual.tokenized.shuffled/news.en.heldout-00000-of-00050")
+        dataset = Dataset(vocab, data_dir, deterministic=True)
+        run_infer(dataset, hps, FLAGS.logdir, FLAGS.mode, vocab)
 
 
 if __name__ == "__main__":
