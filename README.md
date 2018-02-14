@@ -5,43 +5,28 @@ F-LSTM cells from [1]. It also might contain some ongoing experiments.
 
 This code was forked from https://github.com/rafaljozefowicz/lm and contains "BIGLSTM" language model baseline from [2].
 
-Current code runs on Tensorflow r1.0 and supports multi-GPU data parallelism using synchronized gradient updates.
+Current code runs on Tensorflow r1.5 and supports multi-GPU data parallelism using synchronized gradient updates.
 
-# Best perplexity
+# Perplexity
 ~~On One Billion Words benchmark using 8 GPUs in one DGX-1, BIG G-LSTM G4 was able to achieve 24.29 after 2 weeks of training and 23.36 after 3 weeks.~~
 
 __On 02/06/2018 We found an issue with our experimental setup which makes perplexity numbers listed in the paper invalid.__
 
-__We are currently re-running the experiments__
+__We are currently re-running the experiments__ See current numbers in the table below.
 
-
-
-# Performance
-Not using XLA optimization for now. To be tested.
-(In all experiments minibatch of 128 per GPU is used)
-
-* SMALLLSTM model on 1xGP100 is getting about ~34K wps.
-* SMALLLSTM model on 2xGP100 is getting about ~54.9K wps.
-* BIGLSTM model on 1xGP100 is getting about ~4.8K wps
-* BIGLSTM model on 2xGP100 is getting about ~8.5K wps
-* BIG G-LSTM G4 model on 2xGP100 is getting about ~17.4K wps
-* BIG F-LSTM F512 model on 2xGP100 is getting about ~18.5K wps
-
-
-On DGX-1, from [1], after 1 week of training on DGX-1 using all 8 GPUs.
-(newer code should be faster).
+On DGX Station, after 1 week of training using all 4 GPUs (Tesla V100) and batch size of 256 per GPU:
 
 | Model           | Perplexity | Steps      | WPS         |
 | --------------- | :--------: | :--------: | :---------: |
-| BIGLSTM         | 31.001     |    584.6K  |  20.3K      |
-| BIG F-LSTM F512 | 28.11      |    1.217M  |  42.9K      |
-| BIG G-LSTM G4   | 28.17      |    1.128M  |  41.7K      |
-| BIG G-LSTM G16  | 34.789     |    850.4K  |  41.1K      |
+| BIGLSTM         |  35.1      |    ~0.99M  |  ~33.8K     |
+| BIG F-LSTM F512 |  36.3      |    ~1.67M  |  ~56.5K     |
+| BIG G-LSTM G4   |  40.6      |    ~1.65M  |  ~56K       |
+| BIG G-LSTM G8   | TBD        |            |             |
+| BIG G-LSTM G2   | TBD        |            |             |
 
-Exact commit used to produce results from [1]: d98fb110053c187354caf68ff56f5a8535926b5d (should work with TF r1.0)
 
 ## Dependencies
-* TensorFlow r1.0
+* TensorFlow r1.5
 * Python 2.7 (should work with Python 3 too)
 * 1B Word Benchmark Dataset (https://github.com/ciprian-chelba/1-billion-word-language-modeling-benchmark to get data)
 
@@ -49,16 +34,15 @@ Exact commit used to produce results from [1]: d98fb110053c187354caf68ff56f5a853
 Assuming the data directory is in: `/raid/okuchaiev/Data/LM1B/1-billion-word-language-modeling-benchmark-r13output/`, execute:
 
 ```
-export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
+export CUDA_VISIBLE_DEVICES=0,1,2,3
 
 SECONDS=604800
-LOGSUFFIX=BIGLSTM
+LOGSUFFIX=FLSTM-F512-1week
 
-#train
-python /home/okuchaiev/repos/f-lm/single_lm_train.py --logdir=/raid/okuchaiev/Workspace/LM/FGLSTM/$LOGSUFFIX --num_gpus=8 --datadir=/raid/okuchaiev/Data/LM1B/1-billion-word-language-modeling-benchmark-r13output/ --hpconfig run_profiler=False,float16_rnn=False,max_time=$SECONDS,num_steps=20,num_shards=8,num_layers=2,learning_rate=0.2,max_grad_norm=1,keep_prob=0.9,emb_size=1024,projected_size=1024,state_size=8192,num_sampled=8192,batch_size=128  > train_$LOGSUFFIX.log 2>&1
+python /home/okuchaiev/repos/f-lm/single_lm_train.py --logdir=/raid/okuchaiev/Workspace/LM/GLSTM-G4/$LOGSUFFIX --num_gpus=4 --datadir=/raid/okuchaiev/Data/LM/LM1B/1-billion-word-language-modeling-benchmark-r13output/ --hpconfig run_profiler=False,float16_rnn=False,max_time=$SECONDS,num_steps=20,num_shards=8,num_layers=2,learning_rate=0.2,max_grad_norm=1,keep_prob=0.9,emb_size=1024,projected_size=1024,state_size=8192,num_sampled=8192,batch_size=256,fact_size=512  >> train_$LOGSUFFIX.log 2>&1
 
-#eval
-python /home/okuchaiev/repos/f-lm/single_lm_train.py --logdir=/raid/okuchaiev/Workspace/LM/FGLSTM/$LOGSUFFIX --num_gpus=1 --datadir=/raid/okuchaiev/Data/LM1B/1-billion-word-language-modeling-benchmark-r13output/ --mode=eval_full --hpconfig run_profiler=False,float16_rnn=False,max_time=$SECONDS,num_steps=20,num_shards=8,num_layers=2,learning_rate=0.2,max_grad_norm=1,keep_prob=0.9,emb_size=1024,projected_size=1024,state_size=8192,num_sampled=8192,batch_size=4 > eval_full_$LOGSUFFIX.log 2>&1
+python /home/okuchaiev/repos/f-lm/single_lm_train.py --logdir=/raid/okuchaiev/Workspace/LM/GLSTM-G4/$LOGSUFFIX --num_gpus=1 --mode=eval_full --datadir=/raid/okuchaiev/Data/LM/LM1B/1-billion-word-language-modeling-benchmark-r13output/ --hpconfig run_profiler=False,float16_rnn=False,max_time=$SECONDS,num_steps=20,num_shards=8,num_layers=2,learning_rate=0.2,max_grad_norm=1,keep_prob=0.9,emb_size=1024,projected_size=1024,state_size=8192,num_sampled=8192,batch_size=1,fact_size=512
+
 ```
 
 * To use G-LSTM cell specify ```num_of_groups``` parameter.
@@ -67,11 +51,6 @@ python /home/okuchaiev/repos/f-lm/single_lm_train.py --logdir=/raid/okuchaiev/Wo
 Note, that current data reader may miss some tokens when constructing mini-batches which can have a minor effect on final perplexity.
 
 **For most accurate results**, use batch_size=1 and num_steps=1 in evaluation. Thanks to [Ciprian](https://github.com/ciprian-chelba) for noticing this.
-
-## Pre-trained model
-The best model reported in the paper can be found here: https://drive.google.com/file/d/12NT30_wont7evwSl1IT5ECXgwDpIWER3/view?usp=sharing
-
-
 
 ## To change hyper-parameters
 
