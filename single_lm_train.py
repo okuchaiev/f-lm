@@ -39,7 +39,7 @@ def main(_):
         if FLAGS.mode.startswith("eval_train"):
             data_dir = os.path.join(FLAGS.datadir, "training-monolingual.tokenized.shuffled/*")
         elif FLAGS.mode.startswith("eval_full"):
-            data_dir = os.path.join(FLAGS.datadir, "heldout-monolingual.tokenized.shuffled/*")
+            data_dir = os.path.join(FLAGS.datadir, "heldout-monolingual.tokenized.shuffled/news.en.heldout-00000-of-00050")
         else:
             data_dir = os.path.join(FLAGS.datadir, "heldout-monolingual.tokenized.shuffled/news.en.heldout-00000-of-00050")
         dataset = Dataset(vocab, data_dir, deterministic=True)
