@@ -3,9 +3,9 @@ import tensorflow as tf
 from model_utils import sharded_variable, getdtype, variable_summaries
 from common import assign_to_gpu, average_grads, find_trainable_variables
 from hparams import HParams
-from tensorflow.contrib.rnn import LSTMCell
-from factorized_lstm_cells import GLSTMCell, ResidualWrapper, FLSTMCell
-
+#from tensorflow.contrib.rnn import LSTMCell
+from glstm import GLSTMCell
+from flstm import FLSTMCell
 
 class LM(object):
     def __init__(self, hps, mode="train", ps_device="/gpu:0"):
@@ -69,7 +69,7 @@ class LM(object):
         for i in range(hps.num_layers):
             with tf.device("/gpu:%d" % gpu):
                 state = (tf.Variable(tf.zeros([hps.batch_size, hps.state_size],
-                                             dtype=getdtype(hps, True)),
+                                               dtype=getdtype(hps, True)),
                                     trainable=False, collections=[tf.GraphKeys.LOCAL_VARIABLES],
                                     name="state_c_%d_%d" % (gpu, i), dtype=getdtype(hps, True)),
                          tf.Variable(tf.zeros([hps.batch_size, hps.projected_size],
@@ -98,23 +98,23 @@ class LM(object):
                     cell = GLSTMCell(num_units=hps.state_size,
                                      num_proj=hps.projected_size,
                                      number_of_groups=hps.num_of_groups)
+                elif hps.fact_size is not None:
+                    print("Using FLSTM")
+                    cell = FLSTMCell(num_units=hps.state_size,
+                                     fact_size=hps.fact_size,
+                                     num_proj=hps.projected_size)
                 else:
-                    if hps.fact_size:
-                        print("Using F-LSTM")
-                        print("Using factorization: %d x %d x %d" %(2*hps.projected_size, int(hps.fact_size), 4*hps.state_size))
-                        cell = FLSTMCell(num_units=hps.state_size,
-                                         num_proj=hps.projected_size,
-                                         factor_size=int(hps.fact_size))
-                    else:
-                        print("Using LSTMP")
-                        cell = LSTMCell(num_units=hps.state_size,
-                                        num_proj=hps.projected_size)
+                    print("Using LSTMP")
+                    print("Using peepholes: %s" % hps.use_peepholes)
+                    cell = tf.nn.rnn_cell.LSTMCell(num_units=hps.state_size,
+                                                   num_proj=hps.projected_size,
+                                                   use_peepholes=hps.use_peepholes)
 
                 state = tf.contrib.rnn.LSTMStateTuple(self.initial_states[i][0],
                                                   self.initial_states[i][1])
 
                 if hps.use_residual:
-                    cell = ResidualWrapper(cell=cell)
+                    cell = tf.contrib.rnn.ResidualWrapper(cell=cell)
 
                 for t in range(hps.num_steps):
                     if t > 0:
@@ -127,7 +127,6 @@ class LM(object):
                                           self.initial_states[i][1].assign(state[1])]):
                     inputs[t] = tf.identity(inputs[t])
 
-                # inputs = tf.reshape(tf.concat(1, inputs), [-1, hps.projected_size])
         inputs = tf.reshape(tf.concat(inputs, 1), [-1, hps.projected_size])
 
         # Initialization ignores the fact that softmax_w is transposed. Twhat worked slightly better.
@@ -141,6 +140,12 @@ class LM(object):
             logits = tf.matmul(tf.to_float(inputs), full_softmax_w, transpose_b=True) + softmax_b
             targets = tf.reshape(y, [-1])
             loss = tf.nn.sparse_softmax_cross_entropy_with_logits(logits=logits, labels=targets)
+        elif hps.num_sampled == -1: # hack to force into inference mode
+            full_softmax_w = tf.reshape(tf.concat(softmax_w, 1), [-1, hps.projected_size])
+            full_softmax_w = full_softmax_w[:hps.vocab_size, :]
+            logits = tf.matmul(tf.to_float(inputs), full_softmax_w, transpose_b=True) + softmax_b
+            self.samples = tf.arg_max(input=logits, dimension=1)
+            loss = tf.zeros(shape=[1], dtype=tf.float32)
         else:
             targets = tf.reshape(y, [-1, 1])
             loss = tf.nn.sampled_softmax_loss(softmax_w, softmax_b, targets, tf.to_float(inputs),
@@ -231,10 +236,12 @@ class LM(object):
             fact_size=None,
             fnon_linearity="none",
             num_of_groups=0,
+            use_peepholes=False,
 
             save_model_every_min=30,
             save_summary_every_min=16,
             do_sharing=False,
             use_residual=False,
-            loss_scale=1.0
+            loss_scale=1.0,
+            max_steps=3000000
 )
