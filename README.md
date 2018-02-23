@@ -21,8 +21,8 @@ On DGX Station, after 1 week of training using all 4 GPUs (Tesla V100) and batch
 | BIGLSTM         |  35.1      |    ~0.99M  |  ~33.8K     |
 | BIG F-LSTM F512 |  36.3      |    ~1.67M  |  ~56.5K     |
 | BIG G-LSTM G4   |  40.6      |    ~1.65M  |  ~56K       |
-| BIG G-LSTM G8   | TBD        |            |             |
-| BIG G-LSTM G2   | TBD        |            |             |
+| BIG G-LSTM G2   |  36        |    ~1.37M  |  ~47.1K     |
+| BIG G-LSTM G8   |  39.4      |    ~1.7M   |  ~58.5      |
 
 
 ## Dependencies
