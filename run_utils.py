@@ -164,7 +164,6 @@ def run_infer(dataset, hps, logdir, mode, vocab):
     with tf.variable_scope("model"):
         hps.num_sampled = -1  # This will tell model to skip the loss part
         hps.keep_prob = 1.0
-        # model = LM(hps, "eval", "/cpu:0")
         model = LM(hps, "eval", "/gpu:0")
 
     if hps.average_params:
@@ -175,23 +174,31 @@ def run_infer(dataset, hps, logdir, mode, vocab):
 
     config = tf.ConfigProto(allow_soft_placement=True)
     sess = tf.Session(config=config)
-    sw = tf.summary.FileWriter(logdir + "/" + mode, sess.graph)
     ckpt_loader = CheckpointLoader(saver, model.global_step, logdir + "/train")
+    sample_counter = 0
+    time_counter = 0
     with sess.as_default():
-        while ckpt_loader.load_checkpoint():
-            global_step = ckpt_loader.last_global_step
-            data_iterator = dataset.iterate_once(hps.batch_size * hps.num_gpus, hps.num_steps)
-            tf.local_variables_initializer().run()
-            for i, (x, y) in enumerate(data_iterator):
-                # loss = sess.run(model.loss, {model.x: x, model.y: y, model.w: w})
-                samples = sess.run(model.samples, {model.x: x, model.y: y})
-                if i % 100 == 0:
-                    print("SAMPLES")
-                    print([vocab.get_token(int(t)) for t in samples])
+        ckpt_loader.load_checkpoint()
+        data_iterator = dataset.iterate_once(hps.batch_size * hps.num_gpus, hps.num_steps)
+        tf.local_variables_initializer().run()
+        for i, (x, y) in enumerate(data_iterator):
+            # loss = sess.run(model.loss, {model.x: x, model.y: y, model.w: w})
+            s_time = time.time()
+            samples = sess.run(model.samples, {model.x: x, model.y: y})
+            srun_time = time.time() - s_time
+
+            sample_counter += samples.size
+            time_counter += srun_time
+
+            if i % 100 == 0:
+                if hps.batch_size==1:
                     print("TARGETS")
-                    print([vocab.get_token(int(t)) for t in y[0]])
-                    #sys.stdout.write("%d: %.3f (%.3f) ... " % (i, loss, np.exp(loss)))
-                    #sys.stdout.flush()
-            #sys.stdout.write("\n")
+                    print(" ".join([vocab.get_token(int(t)) for t in y[0]]))
+                    print("SAMPLES")
+                    print(" ".join([vocab.get_token(int(t)) for t in samples]))
+                print("WPS: {}".format(sample_counter/time_counter))
+                sample_counter = 0
+                time_counter = 0
+
 
 
