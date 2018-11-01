@@ -12,7 +12,7 @@ Current code runs on Tensorflow r1.5 and supports multi-GPU data parallelism usi
 
 __On 02/06/2018 We found an issue with our experimental setup which makes perplexity numbers listed in the paper invalid.__
 
-__We are currently re-running the experiments__ See current numbers in the table below.
+__See current numbers in the table below.__
 
 On DGX Station, after 1 week of training using all 4 GPUs (Tesla V100) and batch size of 256 per GPU:
 
