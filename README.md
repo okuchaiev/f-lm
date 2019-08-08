@@ -77,7 +77,7 @@ The command accepts and additional argument `--hpconfig` which allows to overrid
 * use_residual=False - whether to use LSTM residual connections
 
 ## Feedback
-Forked code and GLSTM/FLSTM cells: okuchaiev@nvidia.com.
+Forked code and GLSTM/FLSTM cells: okuchaiev@nvidia.com
 
 ## References
 * [1] [Factorization tricks for LSTM networks](https://openreview.net/forum?id=ByxWXyNFg&noteId=ByxWXyNFg), ICLR 2017 workshop.
